@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+
 import httpx
 import pytest
 
@@ -70,6 +72,37 @@ def test_fetch_extracts_html_and_hashes_content():
     assert page.title == "Guide"
     assert "Useful content." in page.text
     assert len(page.content_hash) == 64
+
+
+def test_fetch_handles_gzip_response_without_double_decompression():
+    html = b"<title>Compressed guide</title><main><p>Compressed content.</p></main>"
+
+    def handler(request):
+        assert request.headers["accept-encoding"] == "identity"
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "text/html",
+                "content-encoding": "gzip",
+            },
+            content=gzip.compress(html),
+            request=request,
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(delay_seconds=0),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        page = crawler.fetch("https://example.org/compressed")
+    finally:
+        crawler.close()
+        client.close()
+
+    assert page.title == "Compressed guide"
+    assert "Compressed content." in page.text
 
 
 def test_fetch_rejects_non_html_content():
