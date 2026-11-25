@@ -68,7 +68,6 @@ def test_discovery_service_allows_any_public_domain_by_default() -> None:
     assert "Local" in rejected[0][1]
 
 
-
 def test_discovery_service_validates_result_limit() -> None:
     plan = ResearchPlan.from_dict(
         {"objective": "Research", "scope": "Scope", "topics": []}
