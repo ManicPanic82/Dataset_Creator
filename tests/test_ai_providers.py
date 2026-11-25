@@ -71,6 +71,8 @@ def test_ollama_structured_generation(monkeypatch) -> None:
         assert url.endswith("/api/chat")
         assert json["model"] == "qwen2.5"
         assert json["format"] == "json"
+        assert json["options"] == {"num_predict": 1024}
+        assert timeout == 600.0
         return httpx.Response(
             200,
             json={"message": {"content": '{"objective": "Research Python", "scope": "docs"}'}},
@@ -78,7 +80,9 @@ def test_ollama_structured_generation(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    provider = AIProvider(ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434"))
+    provider = AIProvider(
+        ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434", timeout=600.0)
+    )
     result = provider.generate_json("qwen2.5", "Return JSON.", "Research Python.")
 
     assert result == {"objective": "Research Python", "scope": "docs"}
