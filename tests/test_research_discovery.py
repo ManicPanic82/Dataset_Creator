@@ -44,6 +44,31 @@ def test_discovery_service_filters_and_validates_search_results() -> None:
     assert len(rejected) == 2
 
 
+def test_discovery_service_allows_any_public_domain_by_default() -> None:
+    plan = ResearchPlan.from_dict(
+        {
+            "objective": "Research Python",
+            "scope": "Broad web research",
+            "topics": ["Python"],
+            "search_queries": ["Python learning resources"],
+        }
+    )
+
+    accepted, rejected = ResearchDiscoveryService().discover(
+        plan,
+        FakeSearchProvider(),
+        max_results_per_query=5,
+    )
+
+    assert {item.domain for item in accepted} == {
+        "docs.python.org",
+        "example.com",
+    }
+    assert len(rejected) == 1
+    assert "Local" in rejected[0][1][1]
+
+
+
 def test_discovery_service_validates_result_limit() -> None:
     plan = ResearchPlan.from_dict(
         {"objective": "Research", "scope": "Scope", "topics": []}
