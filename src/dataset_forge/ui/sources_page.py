@@ -6,10 +6,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QPushButton,
     QSplitter,
-    QLineEdit,
     QTextEdit,
     QVBoxLayout,
     QWidget,
