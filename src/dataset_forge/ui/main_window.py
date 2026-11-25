@@ -368,6 +368,10 @@ class MainWindow(QMainWindow):
         if index < 0:
             return
         self.stack.setCurrentIndex(index)
+        if index == 2 and self.current_project_id is not None:
+            # Research can add or approve candidates while Sources is hidden.
+            # Refresh on entry so the user never has to restart the application.
+            self.sources_page.set_project(self.current_project_id)
         title, description = self.SECTIONS[index]
         self.section_title.setText(title)
         self.section_description.setText(description)
