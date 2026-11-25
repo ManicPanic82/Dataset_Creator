@@ -2,7 +2,7 @@
 
 A Windows-first, local-first desktop application for researching, creating, validating and exporting AI training datasets.
 
-The project is being developed in small phases. This branch contains the **Phase 1 desktop foundation**: the native desktop shell, local project persistence, SQLite storage, settings, logging and a cancellable background-task framework. Research, crawling and AI generation are intentionally not implemented yet.
+The project is being developed in small phases. The current development branch builds on the desktop foundation, AI providers and research planning, and introduces the first bounded crawler and source-extraction workflow. See `docs/PROJECT_VISION_AND_ROADMAP.md` and `docs/PHASE_4.md` for scope and safety boundaries.
 
 ## Requirements
 
@@ -56,14 +56,14 @@ Application data is stored under the current user's Windows application-data dir
 
 The SQLite database and rotating application log are created on first launch. Project records are stored in SQLite; project working directories are created under the same application-data root.
 
-## Phase 1 scope
+## Current workflow
 
-- Native PySide6 main window and primary navigation.
-- Project creation, opening and persistent project metadata.
-- SQLite database initialisation with a schema version.
-- Persistent application settings.
-- Rotating structured log output.
-- Background task runner with progress reporting and cancellation.
-- Unit tests for storage, projects, settings and task cancellation.
+- Create a project and generate, edit, save and approve a research plan.
+- Import public HTTP/HTTPS URL candidates and review them.
+- Accept a candidate in Research before fetching it from Sources.
+- Fetch public HTML with bounded redirects, DNS checks, robots.txt handling, streamed response-size limits and per-host delays.
+- Extract page title, readable text, links and a content hash without executing JavaScript.
+- Parse XML sitemaps and follow links only within explicitly supplied crawl origins.
+- Persist extracted source snapshots and provenance for later review.
 
-No network crawling, AI provider calls or dataset generation occurs in this phase.
+The crawler is intentionally conservative and currently processes requests sequentially. It does not bypass authentication, paywalls, CAPTCHAs or website restrictions. Review `docs/PHASE_4.md` for the DNS-rebinding limitation that remains before production-grade crawling.
