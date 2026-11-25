@@ -7,10 +7,10 @@ import time
 import xml.etree.ElementTree as ET
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from threading import RLock
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html.parser import HTMLParser
+from threading import RLock
 from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
