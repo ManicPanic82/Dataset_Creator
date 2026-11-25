@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -160,12 +161,44 @@ class ResearchPage(QWidget):
         try:
             config, model = self.provider_config_getter()
             self._pending_project_id = self.project_id
-            self.task_manager.submit(
-                "research_plan",
-                lambda _context: ResearchPlanner(
-                    create_provider(config), model
-                ).create_plan(objective),
+            LOGGER.info(
+                "Research plan requested: project=%s provider=%s model=%s "
+                "timeout=%.1fs objective_chars=%d",
+                self.project_id,
+                config.kind.value,
+                model,
+                config.timeout,
+                len(objective),
             )
+
+            def generate_plan(_context):
+                started = time.perf_counter()
+                LOGGER.info(
+                    "Research plan worker started: project=%s model=%s",
+                    self.project_id,
+                    model,
+                )
+                try:
+                    plan = ResearchPlanner(
+                        create_provider(config), model
+                    ).create_plan(objective)
+                except Exception:
+                    LOGGER.exception(
+                        "Research plan worker failed: project=%s model=%s elapsed=%.2fs",
+                        self.project_id,
+                        model,
+                        time.perf_counter() - started,
+                    )
+                    raise
+                LOGGER.info(
+                    "Research plan worker completed: project=%s model=%s elapsed=%.2fs",
+                    self.project_id,
+                    model,
+                    time.perf_counter() - started,
+                )
+                return plan
+
+            self.task_manager.submit("research_plan", generate_plan)
         except (ValueError, TypeError) as exc:
             self.status_label.setText(str(exc))
             return
