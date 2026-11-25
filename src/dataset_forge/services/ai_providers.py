@@ -13,7 +13,7 @@ import httpx
 LOGGER = logging.getLogger(__name__)
 
 RESEARCH_GENERATION_TIMEOUT_SECONDS = 600.0
-OLLAMA_STRUCTURED_OUTPUT_TOKENS = 1024
+OLLAMA_STRUCTURED_OUTPUT_TOKENS = 2048
 
 
 class ProviderKind(StrEnum):
@@ -163,6 +163,11 @@ class AIProvider:
             if self.config.kind == ProviderKind.OLLAMA:
                 message = payload.get("message")
                 content = message.get("content") if isinstance(message, dict) else None
+                if payload.get("done_reason") == "length":
+                    raise ValueError(
+                        "Ollama reached the structured-output token limit before finishing. "
+                        f"The current limit is {OLLAMA_STRUCTURED_OUTPUT_TOKENS} tokens."
+                    )
                 metrics = {
                     key: payload.get(key)
                     for key in (
@@ -192,6 +197,11 @@ class AIProvider:
             try:
                 result = json.loads(content)
             except json.JSONDecodeError as exc:
+                if self.config.kind == ProviderKind.OLLAMA:
+                    raise ValueError(
+                        "Ollama returned incomplete or invalid JSON. The response may have "
+                        "reached its output token limit; check the Ollama generation metrics."
+                    ) from exc
                 raise ValueError("The model response was not valid JSON.") from exc
             if not isinstance(result, dict):
                 raise ValueError("The model response must be a JSON object.")
