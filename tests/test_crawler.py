@@ -189,6 +189,36 @@ def test_fetch_retries_transient_server_errors():
     assert "Recovered page." in page.text
 
 
+
+def test_missing_robots_file_allows_public_page_fetch():
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404, request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<title>Example</title><main><p>Public page content.</p></main>",
+            request=request,
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(max_pages=1, max_depth=0, delay_seconds=0),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        result = crawler.crawl(["https://example.org/"])
+    finally:
+        crawler.close()
+        client.close()
+
+    assert len(result.pages) == 1
+    assert result.pages[0].title == "Example"
+    assert "Public page content." in result.pages[0].text
+    assert result.failures == ()
+
+
 def test_robots_server_error_blocks_crawl():
     def handler(request):
         return httpx.Response(503, request=request)
