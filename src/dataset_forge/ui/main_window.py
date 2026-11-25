@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 
 LOGGER = logging.getLogger(__name__)
@@ -70,12 +71,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.projects = projects
         self.settings = settings
+        self.task_manager = TaskManager(self)
         self.current_project_id: str | None = None
         self.setWindowTitle("Dataset Forge AI")
         self.resize(1180, 760)
         self.setMinimumSize(900, 600)
         self._build_ui()
         self._refresh_projects()
+        self._restore_project()
         self._restore_section()
 
     def _build_ui(self) -> None:
@@ -185,6 +188,18 @@ class MainWindow(QMainWindow):
         self.section_title.setText(title)
         self.section_description.setText(description)
         self.settings.set("last_section", index)
+
+    def _restore_project(self) -> None:
+        project_id = self.settings.get("last_project_id")
+        if isinstance(project_id, str):
+            project = self.projects.get(project_id)
+            if project is not None:
+                self.current_project_id = project_id
+                self.project_label.setText(f"OPEN PROJECT\\n{project['name']}")
+
+    def closeEvent(self, event) -> None:
+        self.task_manager.shutdown()
+        super().closeEvent(event)
 
     def _restore_section(self) -> None:
         index = self.settings.get("last_section", 0)
