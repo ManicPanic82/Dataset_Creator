@@ -72,11 +72,17 @@ class ResearchPlan:
             topics=_clean_strings(data.get("topics", []), "topics"),
             subtopics=subtopics,
             search_queries=_clean_strings(data.get("search_queries", []), "search_queries"),
-            preferred_domains=_clean_strings(
-                data.get("preferred_domains", []), "preferred_domains"
+            preferred_domains=tuple(
+                normalize_domain(item)
+                for item in _clean_strings(
+                    data.get("preferred_domains", []), "preferred_domains"
+                )
             ),
-            excluded_domains=_clean_strings(
-                data.get("excluded_domains", []), "excluded_domains"
+            excluded_domains=tuple(
+                normalize_domain(item)
+                for item in _clean_strings(
+                    data.get("excluded_domains", []), "excluded_domains"
+                )
             ),
             source_types=_clean_strings(data.get("source_types", []), "source_types"),
             quality_criteria=_clean_strings(
