@@ -196,7 +196,12 @@ class WebCrawler:
             wait = self.settings.delay_seconds - elapsed
             if wait > 0:
                 time.sleep(wait)
-            with self.client.stream("GET", current, follow_redirects=False) as response:
+            with self.client.stream(
+                "GET",
+                current,
+                follow_redirects=False,
+                headers={"Accept-Encoding": "identity"},
+            ) as response:
                 self._last_request[domain] = time.monotonic()
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
