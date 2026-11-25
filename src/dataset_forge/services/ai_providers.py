@@ -32,16 +32,19 @@ class ProviderDiagnostic:
 
 
 class AIProvider:
-    """Small, synchronous provider adapter. UI callers should run it in a worker."""
+    """Small synchronous provider adapter. UI callers should run it in a worker."""
 
     def __init__(self, config: ProviderConfig) -> None:
         self.config = config
 
     def _request(self, path: str) -> dict[str, Any]:
+        endpoint = self.config.normalized_endpoint()
+        if not endpoint:
+            raise ValueError("A provider endpoint is required.")
         headers: dict[str, str] = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        url = f"{self.config.normalized_endpoint()}/{path.lstrip('/')}"
+        url = f"{endpoint}/{path.lstrip('/')}"
         response = httpx.get(url, headers=headers, timeout=self.config.timeout)
         response.raise_for_status()
         payload = response.json()
