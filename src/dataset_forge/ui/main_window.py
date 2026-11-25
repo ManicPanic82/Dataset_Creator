@@ -38,7 +38,7 @@ class NewProjectDialog(QDialog):
         layout.addRow("Project name", self.name_input)
         layout.addRow("Description", self.description_input)
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Create
+            QDialogButtonBox.StandardButton.Save
             | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
@@ -198,8 +198,7 @@ class MainWindow(QMainWindow):
         self.project_management_list.clear()
         for project in records:
             label = f"{project['name']}  ·  {project['status']}"
-            overview_item = self.project_list.addItem(label)
-            del overview_item
+            self.project_list.addItem(label)
             self.project_list.item(self.project_list.count() - 1).setData(
                 Qt.ItemDataRole.UserRole, project["id"]
             )
