@@ -182,7 +182,8 @@ class WebCrawler:
             parsed = urlsplit(current)
             _validate_public_dns(parsed.hostname or "", self._resolver)
             domain = parsed.hostname or ""
-            wait = self.settings.delay_seconds - (time.monotonic() - self._last_request.get(domain, 0))
+            elapsed = time.monotonic() - self._last_request.get(domain, 0)
+            wait = self.settings.delay_seconds - elapsed
             if wait > 0:
                 time.sleep(wait)
             with self.client.stream("GET", current, follow_redirects=False) as response:
@@ -303,11 +304,13 @@ class WebCrawler:
         progress=None,
         cancelled=None,
     ) -> CrawlResult:
-        page_limit = max_pages or self.settings.max_pages
+        page_limit = self.settings.max_pages if max_pages is None else max_pages
         if not 1 <= page_limit <= self.settings.max_pages:
             raise ValueError("max_pages must be between 1 and the configured page limit.")
         queue: deque[tuple[str, int]] = deque()
         roots: set[str] = set()
+        if len(start_urls) > page_limit:
+            raise ValueError("The number of starting URLs cannot exceed the page limit.")
         for raw in start_urls:
             url = normalize_public_url(raw)
             parsed = urlsplit(url)
@@ -325,7 +328,8 @@ class WebCrawler:
                 continue
             seen.add(url)
             origin = f"{urlsplit(url).scheme}://{urlsplit(url).netloc}"
-            if self.settings.respect_robots_txt and not self._robots(origin).can_fetch(_USER_AGENT, url):
+            allowed = self._robots(origin).can_fetch(_USER_AGENT, url)
+            if self.settings.respect_robots_txt and not allowed:
                 failures.append(CrawlFailure(url, "Blocked by robots.txt."))
                 continue
             try:
