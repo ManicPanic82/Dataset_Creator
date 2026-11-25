@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from dataset_forge.services.ai_providers import AIProvider, ProviderConfig, ProviderKind
 
@@ -65,7 +66,6 @@ def test_empty_endpoint_is_rejected() -> None:
     assert "invalid" in result.message.lower()
 
 
-
 def test_ollama_structured_generation(monkeypatch) -> None:
     def fake_post(url, headers, json, timeout):
         assert url.endswith("/api/chat")
@@ -117,8 +117,6 @@ def test_structured_generation_rejects_non_json(monkeypatch) -> None:
 
     monkeypatch.setattr(httpx, "post", fake_post)
     provider = AIProvider(ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434"))
-
-    import pytest
 
     with pytest.raises(ValueError, match="valid JSON"):
         provider.generate_json("model-a", "system", "user")
