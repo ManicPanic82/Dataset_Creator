@@ -75,15 +75,6 @@ Expected new coverage includes:
 
 **Important:** Phase 3 validates and stores candidate URLs only. It does not fetch or crawl them. Network access, redirect validation, robots.txt handling, and extraction are Phase 4.
 
-## 5. Final working-tree check
-
-```powershell
-git status --short
-```
-
-Do not commit unrelated local modifications as part of Phase 3 validation.
-
-
 ## 5. Research-generation diagnostics
 
 The application log is stored at:
@@ -114,3 +105,11 @@ Select-String -Path $log -Pattern "Research plan|Background task|Structured gene
 ```
 
 Include the entries from **Research plan requested** through the final failure or completion when reporting a problem. This makes it possible to distinguish queue delay, worker delay, model loading/inference time, HTTP timeout, and JSON validation failures.
+
+## 6. Final working-tree check
+
+```powershell
+git status --short
+```
+
+Do not commit unrelated local modifications as part of Phase 3 validation.
