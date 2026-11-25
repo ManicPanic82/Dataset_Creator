@@ -36,3 +36,39 @@ def test_source_extraction_persists_and_updates(tmp_path):
     assert saved["extracted_text"] == "Extracted content"
     content.save(source_id, page)
     assert content.get(source_id)["content_hash"] == "a" * 64
+
+def test_source_extraction_survives_repository_and_database_reopen(tmp_path):
+    database_path = tmp_path / "app.sqlite3"
+    database = Database(database_path)
+    database.initialise()
+    project = ProjectRepository(database).create("Persistent research")
+    research = ResearchRepository(database)
+    research.add_sources(
+        project["id"],
+        [SourceCandidate(url="https://example.org/guide", domain="example.org")],
+    )
+    source_id = research.list_sources(project["id"])[0]["id"]
+    page = ExtractedPage(
+        requested_url="https://example.org/guide",
+        final_url="https://example.org/guide",
+        title="Persistent guide",
+        text="This content must remain available after reopening the application.",
+        links=("https://example.org/next",),
+        content_hash="b" * 64,
+        http_status=200,
+    )
+    SourceContentRepository(database).save(source_id, page)
+
+    reopened_database = Database(database_path)
+    reopened_content = SourceContentRepository(reopened_database)
+    saved = reopened_content.get(source_id)
+
+    assert saved is not None
+    assert saved["requested_url"] == "https://example.org/guide"
+    assert saved["final_url"] == "https://example.org/guide"
+    assert saved["title"] == "Persistent guide"
+    assert saved["extracted_text"] == (
+        "This content must remain available after reopening the application."
+    )
+    assert saved["content_hash"] == "b" * 64
+    assert saved["http_status"] == 200
