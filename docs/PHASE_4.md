@@ -11,7 +11,7 @@ Fetch permitted public pages from approved Phase 3 source candidates, extract re
 - Redirects are handled manually, with URL and DNS validation repeated at each hop; maximum five redirects.
 - Disable environment proxy inheritance, use a clear application user agent, and do not send credentials or cookies.
 - Respect robots.txt by default. A missing robots.txt (HTTP 404) permits crawling; server errors and network failures fail closed and disallow crawling.
-- Limit page count, depth, retries, request timeout, streamed response bytes, and per-host request rate. Requests are currently sequential; the concurrency setting is a validated upper-bound configuration for the later worker-pool implementation.
+- Limit page count, depth, retries, request timeout, streamed response bytes, and per-host request rate. A bounded worker pool runs up to the configured concurrency (1–4) across different hosts. Requests to the same host are serialized through a shared per-host lock so the configured delay cannot be bypassed by parallel workers.
 - Extract title, readable text, links, and a SHA-256 content hash. Scripts and non-content elements are ignored.
 - Parse XML sitemap URL entries with bounded result counts and expose sitemap import in Sources.
 - Restrict link following to the exact origins explicitly supplied as crawl roots.
@@ -22,7 +22,7 @@ Fetch permitted public pages from approved Phase 3 source candidates, extract re
 `CrawlSettings` provides validated safety bounds.
 `WebCrawler.fetch(url)` fetches and extracts one page.
 `WebCrawler.parse_sitemap(url)` parses a sitemap.
-`WebCrawler.crawl(start_urls)` performs a bounded same-origin crawl and returns pages plus per-URL failures.
+`WebCrawler.crawl(start_urls)` performs a bounded same-origin crawl and returns pages plus per-URL failures. The worker pool reserves page slots before dispatch, caps in-flight work at `max_concurrent_requests`, and stops scheduling when cancelled. Same-host requests share a lock and rate-limit clock; robots.txt is fetched once per origin even when several workers start together.
 
 The Sources page is integrated with the existing project-scoped candidate list. A user must accept a candidate in Research before fetching it. Fetching runs in the background, checks robots.txt, and saves extracted snapshots and provenance in SQLite. The page displays title, final URL, and text previews. Same-origin links are followed within the configured page/depth bounds. Users can also import URLs from a public XML sitemap, with each URL added as a reviewable candidate. The content repository is isolated from the existing research-plan tables.
 
