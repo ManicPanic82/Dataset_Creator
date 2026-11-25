@@ -94,9 +94,16 @@ class _PageParser(HTMLParser):
             self._ignored_depth += 1
         if tag == "title":
             self._in_title = True
-        if tag == "a" and attributes.get("href"):
+        if (
+            tag == "a"
+            and attributes.get("href")
+            and not self._ignored_depth
+            and len(self.links) < 500
+        ):
             try:
-                self.links.append(normalize_public_url(urljoin(self.base_url, attributes["href"])))
+                self.links.append(
+                    normalize_public_url(urljoin(self.base_url, attributes["href"]))
+                )
             except ValueError:
                 pass
         if tag in self._BLOCKS:
