@@ -6,10 +6,8 @@ import time
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFormLayout,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QPlainTextEdit,
     QPushButton,
@@ -18,11 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from dataset_forge.services.ai_providers import create_provider
-from dataset_forge.services.research import (
-    DomainFilter,
-    ResearchPlan,
-    import_url_candidates,
-)
+from dataset_forge.services.research import ResearchPlan, import_url_candidates
 from dataset_forge.services.research_planner import ResearchPlanner
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository
@@ -92,14 +86,12 @@ class ResearchPage(QWidget):
         self.url_input.setMaximumHeight(75)
         layout.addWidget(self.url_input)
 
-        filter_form = QFormLayout()
-        self.include_domains = QLineEdit()
-        self.include_domains.setPlaceholderText("e.g. python.org, docs.python.org")
-        filter_form.addRow("Include domains", self.include_domains)
-        self.exclude_domains = QLineEdit()
-        self.exclude_domains.setPlaceholderText("e.g. legacy.example.com")
-        filter_form.addRow("Exclude domains", self.exclude_domains)
-        layout.addLayout(filter_form)
+        layout.addWidget(
+            QLabel(
+                "Any public website can be used. Private/local network addresses and "
+                "unsafe URLs are still blocked."
+            )
+        )
 
         source_actions = QHBoxLayout()
         self.import_button = QPushButton("Import URLs")
@@ -130,8 +122,6 @@ class ResearchPage(QWidget):
         self.prompt_input.clear()
         self.plan_editor.clear()
         self.url_input.clear()
-        self.include_domains.clear()
-        self.exclude_domains.clear()
         self.source_list.clear()
         if project_id is None:
             self.status_label.setText("Open a project to begin research planning.")
@@ -143,8 +133,6 @@ class ResearchPage(QWidget):
             self.plan_editor.setPlainText(
                 json.dumps(saved["plan"].to_dict(), indent=2, ensure_ascii=False)
             )
-            self.include_domains.setText(", ".join(saved["plan"].preferred_domains))
-            self.exclude_domains.setText(", ".join(saved["plan"].excluded_domains))
             self.status_label.setText(f"Loaded {saved['status']} research plan.")
         else:
             self.status_label.setText("Enter a research objective to begin.")
@@ -221,8 +209,6 @@ class ResearchPage(QWidget):
         self.plan_editor.setPlainText(
             json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
         )
-        self.include_domains.setText(", ".join(result.preferred_domains))
-        self.exclude_domains.setText(", ".join(result.excluded_domains))
         self.status_label.setText(
             "Research plan generated. Review and edit it before approval."
         )
@@ -257,37 +243,18 @@ class ResearchPage(QWidget):
                 plan,
                 approved=approved,
             )
-            self.include_domains.setText(", ".join(plan.preferred_domains))
-            self.exclude_domains.setText(", ".join(plan.excluded_domains))
         except (json.JSONDecodeError, ValueError) as exc:
             self.status_label.setText(f"Research plan was not saved: {exc}")
             return
         state = "approved" if approved else "saved as a draft"
         self.status_label.setText(f"Research plan {state} for this project.")
 
-    def _domain_filter(self) -> DomainFilter:
-        include = tuple(
-            item.strip()
-            for item in self.include_domains.text().split(",")
-            if item.strip()
-        )
-        exclude = tuple(
-            item.strip()
-            for item in self.exclude_domains.text().split(",")
-            if item.strip()
-        )
-        return DomainFilter.create(include, exclude)
-
     def _import_urls(self) -> None:
         if self.project_id is None:
             self.status_label.setText("Create or open a project before importing URLs.")
             return
         try:
-            filters = self._domain_filter()
-            accepted, rejected = import_url_candidates(
-                self.url_input.toPlainText(),
-                filters,
-            )
+            accepted, rejected = import_url_candidates(self.url_input.toPlainText())
             inserted = self.research.add_sources(self.project_id, accepted)
         except ValueError as exc:
             self.status_label.setText(f"URL import could not be completed: {exc}")
