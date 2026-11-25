@@ -223,7 +223,9 @@ class WebCrawler:
                 if response.status_code == 200:
                     parser.parse(response.text.splitlines())
                 elif response.status_code == 404:
-                    parser.parse([])
+                    # RFC 9309 treats a missing robots.txt as unavailable, not as a
+                    # blanket crawl prohibition. Explicitly allow public page access.
+                    parser.parse(["User-agent: *", "Allow: /"])
                 else:
                     parser.parse(["User-agent: *", "Disallow: /"])
             except (httpx.HTTPError, ValueError):
