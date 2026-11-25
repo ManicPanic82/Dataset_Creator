@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -32,20 +33,27 @@ class ProviderDiagnostic:
 
 
 class AIProvider:
-    """Small synchronous provider adapter. UI callers should run it in a worker."""
+    """Synchronous provider adapter. UI callers must run it in a worker."""
 
     def __init__(self, config: ProviderConfig) -> None:
         self.config = config
+
+    def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        return headers
 
     def _request(self, path: str) -> dict[str, Any]:
         endpoint = self.config.normalized_endpoint()
         if not endpoint:
             raise ValueError("A provider endpoint is required.")
-        headers: dict[str, str] = {}
-        if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
         url = f"{endpoint}/{path.lstrip('/')}"
-        response = httpx.get(url, headers=headers, timeout=self.config.timeout)
+        response = httpx.get(
+            url,
+            headers=self._headers(),
+            timeout=self.config.timeout,
+        )
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
@@ -66,6 +74,71 @@ class AIProvider:
                 if isinstance(name, str) and name.strip():
                     names.append(name.strip())
         return tuple(names)
+
+    def generate_json(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> dict[str, Any]:
+        """Generate one JSON object using the selected model; never executes model output."""
+        endpoint = self.config.normalized_endpoint()
+        clean_model = model.strip()
+        if not endpoint:
+            raise ValueError("A provider endpoint is required.")
+        if not clean_model:
+            raise ValueError("Select a model before generating a research plan.")
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        if self.config.kind == ProviderKind.OLLAMA:
+            path = "api/chat"
+            body: dict[str, Any] = {
+                "model": clean_model,
+                "messages": messages,
+                "stream": False,
+                "format": "json",
+            }
+        else:
+            path = "v1/chat/completions"
+            body = {
+                "model": clean_model,
+                "messages": messages,
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+            }
+
+        response = httpx.post(
+            f"{endpoint}/{path}",
+            headers=self._headers(),
+            json=body,
+            timeout=self.config.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("The provider returned an invalid generation response.")
+
+        if self.config.kind == ProviderKind.OLLAMA:
+            message = payload.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+        else:
+            choices = payload.get("choices")
+            choice = choices[0] if isinstance(choices, list) and choices else None
+            message = choice.get("message") if isinstance(choice, dict) else None
+            content = message.get("content") if isinstance(message, dict) else None
+
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("The model returned no structured content.")
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ValueError("The model response was not valid JSON.") from exc
+        if not isinstance(result, dict):
+            raise ValueError("The model response must be a JSON object.")
+        return result
 
     def diagnose(self) -> ProviderDiagnostic:
         try:
