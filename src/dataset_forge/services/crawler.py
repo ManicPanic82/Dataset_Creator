@@ -4,10 +4,10 @@ import hashlib
 import ipaddress
 import socket
 import time
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from threading import RLock
 import xml.etree.ElementTree as ET
 from collections import deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from threading import RLock
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html.parser import HTMLParser
@@ -379,7 +379,6 @@ class WebCrawler:
         pages: list[ExtractedPage] = []
         failures: list[CrawlFailure] = []
         pending: dict[Future[ExtractedPage], tuple[str, int]] = {}
-        submitted = 0
         completed = 0
         stop_submitting = False
 
@@ -414,7 +413,6 @@ class WebCrawler:
                     seen.add(url)
                     future = executor.submit(fetch_allowed, url)
                     pending[future] = (url, depth)
-                    submitted += 1
 
                 if not pending:
                     break
