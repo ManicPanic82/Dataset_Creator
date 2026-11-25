@@ -157,3 +157,52 @@ def test_parse_sitemap_returns_only_safe_http_urls():
         crawler.close()
         client.close()
     assert urls == ("https://example.org/one", "https://example.org/two")
+
+
+def test_fetch_retries_transient_server_errors():
+    calls = 0
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<main><p>Recovered page.</p></main>",
+            request=request,
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(max_retries=1, delay_seconds=0),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        page = crawler.fetch("https://example.org/retry")
+    finally:
+        crawler.close()
+        client.close()
+    assert calls == 2
+    assert "Recovered page." in page.text
+
+
+def test_robots_server_error_blocks_crawl():
+    def handler(request):
+        return httpx.Response(503, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(max_pages=1, max_depth=0, delay_seconds=0),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        result = crawler.crawl(["https://example.org/"])
+    finally:
+        crawler.close()
+        client.close()
+    assert result.pages == ()
+    assert result.failures[0].reason == "Blocked by robots.txt."
