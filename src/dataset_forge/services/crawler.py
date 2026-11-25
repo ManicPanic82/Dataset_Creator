@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-import logging
 import socket
 import time
 import xml.etree.ElementTree as ET
@@ -17,7 +16,6 @@ import httpx
 
 from dataset_forge.services.research import normalize_public_url
 
-LOGGER = logging.getLogger(__name__)
 _USER_AGENT = "DatasetForgeAI/0.1 (+responsible research crawler)"
 
 
@@ -217,10 +215,10 @@ class WebCrawler:
                 response = self._request(parser.url)
                 if response.status_code == 200:
                     parser.parse(response.text.splitlines())
-                elif response.status_code in {401, 403}:
-                    parser.parse(["User-agent: *", "Disallow: /"])
-                else:
+                elif response.status_code == 404:
                     parser.parse([])
+                else:
+                    parser.parse(["User-agent: *", "Disallow: /"])
             except (httpx.HTTPError, ValueError):
                 parser.parse(["User-agent: *", "Disallow: /"])
             self._robots_cache[origin] = parser
@@ -233,6 +231,10 @@ class WebCrawler:
         for attempt in range(self.settings.max_retries + 1):
             try:
                 response = self._request(requested)
+                if response.status_code in {429, 500, 502, 503, 504}:
+                    if attempt < self.settings.max_retries:
+                        time.sleep(min(2 ** attempt, 5))
+                        continue
                 break
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = exc
