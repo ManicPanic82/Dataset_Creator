@@ -63,3 +63,62 @@ def test_empty_endpoint_is_rejected() -> None:
     result = AIProvider(ProviderConfig(ProviderKind.OLLAMA, "   ")).diagnose()
     assert not result.success
     assert "invalid" in result.message.lower()
+
+
+
+def test_ollama_structured_generation(monkeypatch) -> None:
+    def fake_post(url, headers, json, timeout):
+        assert url.endswith("/api/chat")
+        assert json["model"] == "qwen2.5"
+        assert json["format"] == "json"
+        return httpx.Response(
+            200,
+            json={"message": {"content": '{"objective": "Research Python", "scope": "docs"}'}},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434"))
+    result = provider.generate_json("qwen2.5", "Return JSON.", "Research Python.")
+
+    assert result == {"objective": "Research Python", "scope": "docs"}
+
+
+def test_openai_compatible_structured_generation(monkeypatch) -> None:
+    def fake_post(url, headers, json, timeout):
+        assert url.endswith("/v1/chat/completions")
+        assert json["response_format"] == {"type": "json_object"}
+        assert headers["Authorization"] == "Bearer runtime-secret"
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"ok": true}'}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(
+        ProviderConfig(
+            ProviderKind.OPENAI_COMPATIBLE,
+            "https://api.example.test",
+            api_key="runtime-secret",
+        )
+    )
+
+    assert provider.generate_json("model-a", "system", "user") == {"ok": True}
+
+
+def test_structured_generation_rejects_non_json(monkeypatch) -> None:
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            200,
+            json={"message": {"content": "not json"}},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434"))
+
+    import pytest
+
+    with pytest.raises(ValueError, match="valid JSON"):
+        provider.generate_json("model-a", "system", "user")
