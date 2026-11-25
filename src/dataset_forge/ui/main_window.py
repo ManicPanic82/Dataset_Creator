@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.projects = projects
         self.settings = settings
-        self.task_manager = TaskManager(self)
+        self.task_manager = TaskManager(self)\n        self.task_manager.task_succeeded.connect(self._provider_task_succeeded)\n        self.task_manager.task_failed.connect(self._provider_task_failed)
         self.current_project_id: str | None = None
         self.setWindowTitle("Dataset Forge AI")
         self.resize(1180, 760)
