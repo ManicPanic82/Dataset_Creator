@@ -10,7 +10,7 @@ Fetch permitted public pages from approved Phase 3 source candidates, extract re
 - Resolve hostnames and reject any destination with a non-global IP address.
 - Redirects are handled manually, with URL and DNS validation repeated at each hop; maximum five redirects.
 - Disable environment proxy inheritance, use a clear application user agent, and do not send credentials or cookies.
-- Respect robots.txt by default. A robots.txt retrieval failure is treated conservatively as disallow.
+- Respect robots.txt by default. A missing robots.txt (HTTP 404) permits crawling; server errors and network failures fail closed and disallow crawling.
 - Limit page count, depth, retries, request timeout, streamed response bytes, and per-host request rate. Requests are currently sequential; the concurrency setting is a validated upper-bound configuration for the later worker-pool implementation.
 - Extract title, readable text, links, and a SHA-256 content hash. Scripts and non-content elements are ignored.
 - Parse XML sitemap URL entries with bounded result counts and expose sitemap import in Sources.
