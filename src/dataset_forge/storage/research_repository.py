@@ -10,7 +10,7 @@ from dataset_forge.storage.database import Database
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 class ResearchRepository:
