@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import threading
 
 import httpx
 import pytest
@@ -269,3 +270,105 @@ def test_robots_server_error_blocks_crawl():
         client.close()
     assert result.pages == ()
     assert result.failures[0].reason == "Blocked by robots.txt."
+
+
+
+def test_crawl_runs_bounded_requests_concurrently_across_hosts():
+    barrier = threading.Barrier(2)
+    active = 0
+    maximum_active = 0
+    guard = threading.Lock()
+
+    def handler(request):
+        nonlocal active, maximum_active
+        with guard:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            barrier.wait(timeout=2)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<main><p>Concurrent page.</p></main>",
+                request=request,
+            )
+        finally:
+            with guard:
+                active -= 1
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(
+            max_pages=2,
+            max_depth=0,
+            max_concurrent_requests=2,
+            delay_seconds=0,
+            respect_robots_txt=False,
+        ),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        result = crawler.crawl(
+            ["https://one.example/page", "https://two.example/page"]
+        )
+    finally:
+        crawler.close()
+        client.close()
+
+    assert len(result.pages) == 2
+    assert result.failures == ()
+    assert maximum_active == 2
+
+
+def test_crawl_never_exceeds_configured_worker_count():
+    active = 0
+    maximum_active = 0
+    guard = threading.Lock()
+
+    def handler(request):
+        nonlocal active, maximum_active
+        with guard:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            # Yield long enough for the other worker to enter the transport.
+            threading.Event().wait(0.03)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<main><p>Bounded page.</p></main>",
+                request=request,
+            )
+        finally:
+            with guard:
+                active -= 1
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(
+            max_pages=4,
+            max_depth=0,
+            max_concurrent_requests=2,
+            delay_seconds=0,
+            respect_robots_txt=False,
+        ),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        result = crawler.crawl(
+            [
+                "https://one.example/page",
+                "https://two.example/page",
+                "https://three.example/page",
+                "https://four.example/page",
+            ]
+        )
+    finally:
+        crawler.close()
+        client.close()
+
+    assert len(result.pages) == 4
+    assert maximum_active <= 2
+    assert maximum_active == 2
