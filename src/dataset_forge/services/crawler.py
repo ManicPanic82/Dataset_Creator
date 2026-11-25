@@ -269,7 +269,14 @@ class WebCrawler:
     def parse_sitemap(self, url: str, *, max_urls: int = 500) -> tuple[str, ...]:
         if not 1 <= max_urls <= 5000:
             raise ValueError("max_urls must be between 1 and 5000.")
-        response = self._request(normalize_public_url(url))
+        sitemap_url = normalize_public_url(url)
+        parsed_url = urlsplit(sitemap_url)
+        origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        if self.settings.respect_robots_txt and not self._robots(origin).can_fetch(
+            _USER_AGENT, sitemap_url
+        ):
+            raise ValueError("Sitemap access is disallowed by robots.txt.")
+        response = self._request(sitemap_url)
         if response.status_code != 200:
             raise ValueError(f"Sitemap request returned status {response.status_code}.")
         if len(response.content) > self.settings.max_content_bytes:
