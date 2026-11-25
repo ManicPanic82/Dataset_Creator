@@ -160,11 +160,12 @@ class ResearchPage(QWidget):
             return
         try:
             config, model = self.provider_config_getter()
-            self._pending_project_id = self.project_id
+            project_id = self.project_id
+            self._pending_project_id = project_id
             LOGGER.info(
                 "Research plan requested: project=%s provider=%s model=%s "
                 "timeout=%.1fs objective_chars=%d",
-                self.project_id,
+                project_id,
                 config.kind.value,
                 model,
                 config.timeout,
@@ -175,7 +176,7 @@ class ResearchPage(QWidget):
                 started = time.perf_counter()
                 LOGGER.info(
                     "Research plan worker started: project=%s model=%s",
-                    self.project_id,
+                    project_id,
                     model,
                 )
                 try:
@@ -185,14 +186,14 @@ class ResearchPage(QWidget):
                 except Exception:
                     LOGGER.exception(
                         "Research plan worker failed: project=%s model=%s elapsed=%.2fs",
-                        self.project_id,
+                        project_id,
                         model,
                         time.perf_counter() - started,
                     )
                     raise
                 LOGGER.info(
                     "Research plan worker completed: project=%s model=%s elapsed=%.2fs",
-                    self.project_id,
+                    project_id,
                     model,
                     time.perf_counter() - started,
                 )
