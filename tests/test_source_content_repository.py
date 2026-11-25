@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataset_forge.services.crawler import ExtractedPage
+from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
 from dataset_forge.storage.repositories import ProjectRepository
 from dataset_forge.storage.research_repository import ResearchRepository
 from dataset_forge.storage.source_content_repository import SourceContentRepository
-from dataset_forge.services.research import SourceCandidate
 
 
 def test_source_extraction_persists_and_updates(tmp_path):
