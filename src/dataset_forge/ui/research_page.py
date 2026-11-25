@@ -129,6 +129,8 @@ class ResearchPage(QWidget):
         self.prompt_input.clear()
         self.plan_editor.clear()
         self.url_input.clear()
+        self.include_domains.clear()
+        self.exclude_domains.clear()
         self.source_list.clear()
         if project_id is None:
             self.status_label.setText("Open a project to begin research planning.")
@@ -140,6 +142,8 @@ class ResearchPage(QWidget):
             self.plan_editor.setPlainText(
                 json.dumps(saved["plan"].to_dict(), indent=2, ensure_ascii=False)
             )
+            self.include_domains.setText(", ".join(saved["plan"].preferred_domains))
+            self.exclude_domains.setText(", ".join(saved["plan"].excluded_domains))
             self.status_label.setText(f"Loaded {saved['status']} research plan.")
         else:
             self.status_label.setText("Enter a research objective to begin.")
@@ -182,6 +186,8 @@ class ResearchPage(QWidget):
         self.plan_editor.setPlainText(
             json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
         )
+        self.include_domains.setText(", ".join(result.preferred_domains))
+        self.exclude_domains.setText(", ".join(result.excluded_domains))
         self.status_label.setText(
             "Research plan generated. Review and edit it before approval."
         )
@@ -189,7 +195,8 @@ class ResearchPage(QWidget):
     def _task_failed(self, task_id: str, error: str) -> None:
         if task_id == "research_plan":
             LOGGER.warning("Research plan generation failed: %s", error)
-            self.status_label.setText(f"Research plan generation failed: {error}")
+            if self._pending_project_id == self.project_id:
+                self.status_label.setText(f"Research plan generation failed: {error}")
 
     def _task_finished(self, task_id: str) -> None:
         if task_id == "research_plan":
@@ -215,6 +222,8 @@ class ResearchPage(QWidget):
                 plan,
                 approved=approved,
             )
+            self.include_domains.setText(", ".join(plan.preferred_domains))
+            self.exclude_domains.setText(", ".join(plan.excluded_domains))
         except (json.JSONDecodeError, ValueError) as exc:
             self.status_label.setText(f"Research plan was not saved: {exc}")
             return
