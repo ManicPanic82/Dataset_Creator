@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
             QPushButton { background: #285b91; border: 0; border-radius: 6px;
                           padding: 9px 13px; color: white; }
             QPushButton:hover { background: #3476b8; }
-            QLineEdit, QTextEdit, QListWidget, QComboBox {
+            QLineEdit, QTextEdit, QPlainTextEdit, QListWidget, QComboBox {
                 background: #1c2430; border: 1px solid #344255;
                 border-radius: 5px; padding: 7px;
             }
