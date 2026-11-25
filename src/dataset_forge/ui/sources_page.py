@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QPushButton,
     QSplitter,
+    QLineEdit,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -54,6 +55,14 @@ class SourcesPage(QWidget):
         actions.addWidget(self.refresh_button)
         actions.addStretch(1)
         layout.addLayout(actions)
+        sitemap_row = QHBoxLayout()
+        self.sitemap_input = QLineEdit()
+        self.sitemap_input.setPlaceholderText("Optional sitemap.xml URL")
+        sitemap_row.addWidget(self.sitemap_input, 1)
+        self.sitemap_button = QPushButton("Import sitemap")
+        self.sitemap_button.clicked.connect(self._import_sitemap)
+        sitemap_row.addWidget(self.sitemap_button)
+        layout.addLayout(sitemap_row)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.source_list = QListWidget()
         self.source_list.currentItemChanged.connect(self._show_preview)
@@ -90,6 +99,40 @@ class SourcesPage(QWidget):
         self.status.setText(
             f"{self.source_list.count()} candidate source(s). Only accepted sources can be fetched."
         )
+
+
+    def _import_sitemap(self) -> None:
+        if self.project_id is None:
+            self.status.setText("Open a project before importing a sitemap.")
+            return
+        sitemap_url = self.sitemap_input.text().strip()
+        if not sitemap_url:
+            self.status.setText("Enter a public sitemap URL first.")
+            return
+        project_id = self.project_id
+
+        def import_urls(context):
+            context.report_progress(5, "Validating and reading sitemap...")
+            with WebCrawler(CrawlSettings(max_pages=1, max_depth=0)) as crawler:
+                urls = crawler.parse_sitemap(sitemap_url, max_urls=200)
+            context.raise_if_cancelled()
+            candidates = tuple(
+                SourceCandidate(
+                    url=url,
+                    domain=domain_from_url(url),
+                    discovery_method="sitemap",
+                )
+                for url in urls
+            )
+            return self.research.add_sources(project_id, candidates)
+
+        try:
+            self.task_manager.submit("sitemap_import", import_urls)
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        self.sitemap_button.setEnabled(False)
+        self.status.setText("Reading sitemap in the background...")
 
     def _fetch_selected(self) -> None:
         item = self.source_list.currentItem()
@@ -147,6 +190,10 @@ class SourcesPage(QWidget):
         self.status.setText(f"Fetching {url} in the background...")
 
     def _task_succeeded(self, task_id: str, result: object) -> None:
+        if task_id == "sitemap_import":
+            self._refresh()
+            self.status.setText(f"Imported {result} new sitemap candidate(s).")
+            return
         if task_id != "source_fetch":
             return
         self._refresh()
@@ -164,11 +211,15 @@ class SourcesPage(QWidget):
         if task_id == "source_fetch":
             LOGGER.warning("Source extraction failed: %s", error)
             self.status.setText(f"Source fetch failed: {error}")
+        elif task_id == "sitemap_import":
+            self.status.setText(f"Sitemap import failed: {error}")
 
     def _task_finished(self, task_id: str) -> None:
         if task_id == "source_fetch":
             self._active_source_id = None
             self.fetch_button.setEnabled(True)
+        elif task_id == "sitemap_import":
+            self.sitemap_button.setEnabled(True)
 
     def _show_preview(self, current, _previous) -> None:
         if current is None:
