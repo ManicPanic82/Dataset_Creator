@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -115,13 +116,20 @@ class AIProvider:
             }
 
         url = f"{endpoint}/{path}"
+        parsed_endpoint = urlsplit(endpoint)
+        endpoint_label = f"{parsed_endpoint.scheme}://{parsed_endpoint.hostname or 'unknown'}"
+        try:
+            if parsed_endpoint.port is not None:
+                endpoint_label += f":{parsed_endpoint.port}"
+        except ValueError:
+            endpoint_label = f"{parsed_endpoint.scheme}://invalid-endpoint"
         started = time.perf_counter()
         LOGGER.info(
             "Structured generation started: provider=%s model=%s endpoint=%s "
             "timeout=%.1fs system_prompt_chars=%d user_prompt_chars=%d",
             self.config.kind.value,
             clean_model,
-            endpoint,
+            endpoint_label,
             self.config.timeout,
             len(system_prompt),
             len(user_prompt),
