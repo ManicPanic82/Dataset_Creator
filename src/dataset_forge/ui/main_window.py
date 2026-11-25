@@ -4,7 +4,8 @@ import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QComboBox,\n    QDialog,
+    QComboBox,
+    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
@@ -12,7 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
-    QMessageBox,\n    QPlainTextEdit,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QTextEdit,
@@ -20,7 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dataset_forge.services.ai_providers import ProviderConfig, ProviderKind, create_provider\nfrom dataset_forge.services.task_manager import TaskManager
+from dataset_forge.services.ai_providers import (
+    ProviderConfig,
+    ProviderDiagnostic,
+    ProviderKind,
+    create_provider,
+)
+from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 
 LOGGER = logging.getLogger(__name__)
@@ -63,6 +70,17 @@ class MainWindow(QMainWindow):
         ("Settings", "Local application preferences and provider configuration."),
     ]
 
+    PROVIDER_LABELS = {
+        ProviderKind.OLLAMA: "Ollama",
+        ProviderKind.LM_STUDIO: "LM Studio",
+        ProviderKind.OPENAI_COMPATIBLE: "OpenAI-compatible",
+    }
+    PROVIDER_ENDPOINTS = {
+        ProviderKind.OLLAMA: "http://localhost:11434",
+        ProviderKind.LM_STUDIO: "http://localhost:1234",
+        ProviderKind.OPENAI_COMPATIBLE: "https://api.openai.com",
+    }
+
     def __init__(
         self,
         projects: ProjectRepository,
@@ -71,7 +89,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.projects = projects
         self.settings = settings
-        self.task_manager = TaskManager(self)\n        self.task_manager.task_succeeded.connect(self._provider_task_succeeded)\n        self.task_manager.task_failed.connect(self._provider_task_failed)
+        self.task_manager = TaskManager(self)
+        self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
+        self.task_manager.task_failed.connect(self._provider_task_failed)
+        self.task_manager.task_finished.connect(self._provider_task_finished)
         self.current_project_id: str | None = None
         self.setWindowTitle("Dataset Forge AI")
         self.resize(1180, 760)
@@ -79,6 +100,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._refresh_projects()
         self._restore_project()
+        self._load_provider_settings()
         self._restore_section()
 
     def _build_ui(self) -> None:
@@ -147,9 +169,7 @@ class MainWindow(QMainWindow):
                 create_button.clicked.connect(self._create_project)
                 page_layout.addWidget(create_button, alignment=Qt.AlignmentFlag.AlignLeft)
             elif title == "Settings":
-                page_layout.addWidget(QLabel("Application data is stored locally."))
-                page_layout.addWidget(QLabel("AI provider settings will be introduced in Phase 2."))
-                page_layout.addStretch(1)
+                self._build_settings_page(page_layout)
             else:
                 placeholder = QLabel(description)
                 placeholder.setObjectName("placeholder")
@@ -174,42 +194,87 @@ class MainWindow(QMainWindow):
             QPushButton { background: #285b91; border: 0; border-radius: 6px;
                           padding: 9px 13px; color: white; }
             QPushButton:hover { background: #3476b8; }
-            QLineEdit, QTextEdit, QListWidget { background: #1c2430;
-                          border: 1px solid #344255; border-radius: 5px; padding: 7px; }
+            QLineEdit, QTextEdit, QListWidget, QComboBox {
+                background: #1c2430; border: 1px solid #344255;
+                border-radius: 5px; padding: 7px;
+            }
             #placeholder { color: #aab8c8; font-size: 16px; padding: 18px 0; }
             """
         )
 
-    def _provider_defaults(self, index: int) -> None:
-        kind = self.provider_combo.currentData()
-        if kind == ProviderKind.OLLAMA.value:
-            self.endpoint_input.setText("http://localhost:11434")
-        elif kind == ProviderKind.LM_STUDIO.value:
-            self.endpoint_input.setText("http://localhost:1234")
-        else:
-            if not self.endpoint_input.text().startswith("http"):
-                self.endpoint_input.setText("https://api.openai.com")
+    def _build_settings_page(self, layout: QVBoxLayout) -> None:
+        layout.addWidget(QLabel("AI provider"))
+        layout.addWidget(
+            QLabel(
+                "Connect a local model server or an OpenAI-compatible API. "
+                "API keys are used only for the current session and are never saved."
+            )
+        )
+        form = QFormLayout()
+        self.provider_combo = QComboBox()
+        for kind, label in self.PROVIDER_LABELS.items():
+            self.provider_combo.addItem(label, kind.value)
+        self.provider_combo.currentIndexChanged.connect(self._provider_defaults)
+        form.addRow("Provider", self.provider_combo)
+
+        self.endpoint_input = QLineEdit()
+        self.endpoint_input.setPlaceholderText("http://localhost:11434")
+        form.addRow("Endpoint", self.endpoint_input)
+
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_input.setPlaceholderText("Optional API key (not saved)")
+        form.addRow("API key", self.api_key_input)
+
+        self.model_combo = QComboBox()
+        self.model_combo.setEditable(True)
+        self.model_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        form.addRow("Default model", self.model_combo)
+        layout.addLayout(form)
+
+        actions = QHBoxLayout()
+        self.test_provider_button = QPushButton("Test connection & discover models")
+        self.test_provider_button.clicked.connect(self._test_provider_connection)
+        actions.addWidget(self.test_provider_button)
+        save_button = QPushButton("Save provider settings")
+        save_button.clicked.connect(self._save_provider_settings)
+        actions.addWidget(save_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.provider_status = QLabel("Provider connection has not been tested.")
+        self.provider_status.setObjectName("muted")
+        self.provider_status.setWordWrap(True)
+        layout.addWidget(self.provider_status)
+        layout.addStretch(1)
+
+    def _provider_defaults(self, _index: int) -> None:
+        try:
+            kind = ProviderKind(self.provider_combo.currentData())
+        except ValueError:
+            return
+        self.endpoint_input.setText(self.PROVIDER_ENDPOINTS[kind])
 
     def _load_provider_settings(self) -> None:
-        kind = self.settings.get("ai_provider", ProviderKind.OLLAMA.value)
-        index = self.provider_combo.findData(kind)
-        if index >= 0:
-            self.provider_combo.setCurrentIndex(index)
-        defaults = {
-            ProviderKind.OLLAMA.value: "http://localhost:11434",
-            ProviderKind.LM_STUDIO.value: "http://localhost:1234",
-            ProviderKind.OPENAI_COMPATIBLE.value: "https://api.openai.com",
-        }
-        self.endpoint_input.setText(self.settings.get("ai_endpoint", defaults.get(kind, "")))
+        raw_kind = self.settings.get("ai_provider", ProviderKind.OLLAMA.value)
+        try:
+            kind = ProviderKind(raw_kind)
+        except ValueError:
+            kind = ProviderKind.OLLAMA
+        self.provider_combo.setCurrentIndex(self.provider_combo.findData(kind.value))
+        endpoint = self.settings.get("ai_endpoint", self.PROVIDER_ENDPOINTS[kind])
+        self.endpoint_input.setText(str(endpoint))
         model = self.settings.get("ai_model", "")
         if model:
-            self.model_combo.setCurrentText(model)
+            self.model_combo.setCurrentText(str(model))
 
     def _save_provider_settings(self) -> None:
         self.settings.set("ai_provider", self.provider_combo.currentData())
         self.settings.set("ai_endpoint", self.endpoint_input.text().strip())
         self.settings.set("ai_model", self.model_combo.currentText().strip())
-        self.provider_status.setText("Provider settings saved. API key is not stored.")
+        self.provider_status.setText(
+            "Provider settings saved. The API key remains session-only."
+        )
 
     def _test_provider_connection(self) -> None:
         try:
@@ -217,29 +282,49 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.provider_status.setText("Unsupported provider selection.")
             return
+        endpoint = self.endpoint_input.text().strip()
+        if not endpoint:
+            self.provider_status.setText("Enter a provider endpoint first.")
+            return
         config = ProviderConfig(
             kind=kind,
-            endpoint=self.endpoint_input.text().strip(),
+            endpoint=endpoint,
             api_key=self.api_key_input.text(),
         )
-        self.provider_status.setText("Connecting...")
-        self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
-        self.task_manager.task_failed.connect(self._provider_task_failed)
-        self.task_manager.submit("provider_diagnostic", lambda _context: create_provider(config).diagnose())
+        self.provider_status.setText("Connecting and discovering models...")
+        self.test_provider_button.setEnabled(False)
+        try:
+            self.task_manager.submit(
+                "provider_diagnostic",
+                lambda _context: create_provider(config).diagnose(),
+            )
+        except ValueError as exc:
+            self.test_provider_button.setEnabled(True)
+            self.provider_status.setText(str(exc))
 
     def _provider_task_succeeded(self, task_id: str, result: object) -> None:
         if task_id != "provider_diagnostic":
             return
+        if not isinstance(result, ProviderDiagnostic):
+            self.provider_status.setText("Provider returned an unexpected diagnostic.")
+            return
         self.provider_status.setText(result.message)
-        self.model_combo.clear()
-        self.model_combo.addItems(list(result.models))
-        saved_model = self.settings.get("ai_model", "")
-        if saved_model:
-            self.model_combo.setCurrentText(saved_model)
+        if result.success:
+            current_model = self.model_combo.currentText()
+            self.model_combo.clear()
+            self.model_combo.addItems(list(result.models))
+            if current_model:
+                self.model_combo.setCurrentText(current_model)
+            elif self.settings.get("ai_model", ""):
+                self.model_combo.setCurrentText(str(self.settings.get("ai_model", "")))
 
     def _provider_task_failed(self, task_id: str, error: str) -> None:
         if task_id == "provider_diagnostic":
-            self.provider_status.setText(error)
+            self.provider_status.setText(f"Provider check failed: {error}")
+
+    def _provider_task_finished(self, task_id: str) -> None:
+        if task_id == "provider_diagnostic":
+            self.test_provider_button.setEnabled(True)
 
     def _change_section(self, index: int) -> None:
         if index < 0:
@@ -256,7 +341,7 @@ class MainWindow(QMainWindow):
             project = self.projects.get(project_id)
             if project is not None:
                 self.current_project_id = project_id
-                self.project_label.setText(f"OPEN PROJECT\\n{project['name']}")
+                self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
 
     def closeEvent(self, event) -> None:
         self.task_manager.shutdown()
