@@ -45,6 +45,7 @@ class ResearchPage(QWidget):
         self.task_manager = task_manager
         self.provider_config_getter = provider_config_getter
         self.project_id: str | None = None
+        self._pending_project_id: str | None = None
         self._build_ui()
         self.task_manager.task_succeeded.connect(self._task_succeeded)
         self.task_manager.task_failed.connect(self._task_failed)
@@ -154,6 +155,7 @@ class ResearchPage(QWidget):
             return
         try:
             config, model = self.provider_config_getter()
+            self._pending_project_id = self.project_id
             self.task_manager.submit(
                 "research_plan",
                 lambda _context: ResearchPlanner(
@@ -168,6 +170,11 @@ class ResearchPage(QWidget):
 
     def _task_succeeded(self, task_id: str, result: object) -> None:
         if task_id != "research_plan":
+            return
+        if self._pending_project_id != self.project_id:
+            self.status_label.setText(
+                "Plan generation completed for a different project; reopen that project to review it."
+            )
             return
         if not isinstance(result, ResearchPlan):
             self.status_label.setText("The AI provider returned an unexpected plan result.")
@@ -186,6 +193,7 @@ class ResearchPage(QWidget):
 
     def _task_finished(self, task_id: str) -> None:
         if task_id == "research_plan":
+            self._pending_project_id = None
             self.generate_button.setEnabled(True)
 
     def _save_plan(self, *, approved: bool) -> None:
