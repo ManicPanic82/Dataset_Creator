@@ -71,7 +71,7 @@ def test_ollama_structured_generation(monkeypatch) -> None:
         assert url.endswith("/api/chat")
         assert json["model"] == "qwen2.5"
         assert json["format"] == "json"
-        assert json["options"] == {"num_predict": 1024}
+        assert json["options"] == {"num_predict": 2048}
         assert timeout == 600.0
         return httpx.Response(
             200,
@@ -86,6 +86,26 @@ def test_ollama_structured_generation(monkeypatch) -> None:
     result = provider.generate_json("qwen2.5", "Return JSON.", "Research Python.")
 
     assert result == {"objective": "Research Python", "scope": "docs"}
+
+
+def test_ollama_truncated_generation_reports_token_limit(monkeypatch) -> None:
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "message": {"content": '{"objective": "unfinished'},
+                "done_reason": "length",
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(
+        ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434", timeout=600.0)
+    )
+
+    with pytest.raises(ValueError, match="token limit"):
+        provider.generate_json("qwen3:4b", "system", "user")
 
 
 def test_openai_compatible_structured_generation(monkeypatch) -> None:
