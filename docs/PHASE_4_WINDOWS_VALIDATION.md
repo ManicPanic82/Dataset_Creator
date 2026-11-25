@@ -41,9 +41,12 @@ Do not reset, stash, or overwrite existing local modifications.
 3. Select the candidate and click **Accept selected**.
 4. Open Sources, select the accepted candidate, and click **Fetch selected accepted source**.
 5. Confirm fetching runs in the background and the extracted title, final URL, and readable text appear in the preview.
-6. Confirm same-origin links discovered from the page appear as source candidates and extracted snapshots persist when switching projects and returning.
-7. Enter a public sitemap URL in the sitemap field and click **Import sitemap**. Confirm the returned URLs appear as candidates.
-8. Try a candidate that returns an HTTP error or blocks crawling in robots.txt. Confirm the failure is shown without crashing the application.
+6. Navigate to Research and back to Sources. Confirm the candidate list refreshes without restarting the application and the extracted marker remains visible.
+7. Select the extracted source again and confirm its readable text preview is restored.
+8. Close and relaunch Dataset Forge, reopen the same project, open Sources, and confirm the extracted marker and full text preview are still available.
+9. Confirm same-origin links discovered from the page appear as source candidates.
+10. Enter a public sitemap URL in the sitemap field and click **Import sitemap**. Confirm the returned URLs appear as candidates.
+11. Try a candidate that returns an HTTP error or blocks crawling in robots.txt. Confirm the failure is shown without crashing the application.
 
 ## 5. Safety checks
 
