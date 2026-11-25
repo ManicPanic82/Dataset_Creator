@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dataset_forge.services.ai_providers import ProviderConfig, ProviderKind, create_provider
+from dataset_forge.services.ai_providers import create_provider
 from dataset_forge.services.research import (
     DomainFilter,
     ResearchPlan,
