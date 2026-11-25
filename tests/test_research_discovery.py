@@ -65,7 +65,7 @@ def test_discovery_service_allows_any_public_domain_by_default() -> None:
         "example.com",
     }
     assert len(rejected) == 1
-    assert "Local" in rejected[0][1][1]
+    assert "Local" in rejected[0][1]
 
 
 
