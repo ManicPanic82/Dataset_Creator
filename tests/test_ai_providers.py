@@ -120,3 +120,63 @@ def test_structured_generation_rejects_non_json(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="valid JSON"):
         provider.generate_json("model-a", "system", "user")
+
+
+
+def test_ollama_generation_logs_timing_and_runtime_metrics(monkeypatch, caplog) -> None:
+    def fake_post(url, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "message": {"content": '{"ok": true}'},
+                "total_duration": 2_000_000_000,
+                "load_duration": 500_000_000,
+                "prompt_eval_count": 42,
+                "eval_count": 12,
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(
+        ProviderConfig(
+            ProviderKind.OLLAMA,
+            "http://user:password@localhost:11434/private-path?token=hidden",
+            timeout=120.0,
+        )
+    )
+
+    with caplog.at_level("INFO"):
+        assert provider.generate_json("qwen3.5:4b", "private system prompt", "private user prompt") == {
+            "ok": True
+        }
+
+    messages = "\\n".join(record.getMessage() for record in caplog.records)
+    assert "Structured generation started" in messages
+    assert "Structured generation HTTP response received" in messages
+    assert "Ollama generation metrics" in messages
+    assert "prompt_eval_count" in messages
+    assert "Structured generation completed" in messages
+    assert "localhost:11434" in messages
+    assert "password" not in messages
+    assert "token=hidden" not in messages
+    assert "private system prompt" not in messages
+    assert "private user prompt" not in messages
+
+
+def test_generation_timeout_is_logged_with_elapsed_time(monkeypatch, caplog) -> None:
+    def fake_post(url, **kwargs):
+        request = httpx.Request("POST", url)
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    provider = AIProvider(
+        ProviderConfig(ProviderKind.OLLAMA, "http://localhost:11434", timeout=120.0)
+    )
+
+    with caplog.at_level("ERROR"), pytest.raises(httpx.ReadTimeout):
+        provider.generate_json("qwen3.5:4b", "system", "user")
+
+    assert "Structured generation failed" in caplog.text
+    assert "ReadTimeout" in caplog.text
+    assert "timeout=120.0s" in caplog.text
