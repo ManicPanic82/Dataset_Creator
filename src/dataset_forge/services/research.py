@@ -8,7 +8,7 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 
 def _clean_strings(value: object, field_name: str, *, limit: int = 30) -> tuple[str, ...]:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         raise ValueError(f"{field_name} must be a list of strings.")
     cleaned = tuple(
         item.strip()
