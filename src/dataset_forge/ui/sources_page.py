@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from dataset_forge.services.crawler import CrawlSettings, WebCrawler
+from dataset_forge.services.research import SourceCandidate, domain_from_url
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.research_repository import ResearchRepository
 from dataset_forge.storage.source_content_repository import SourceContentRepository
@@ -109,15 +110,29 @@ class SourcesPage(QWidget):
 
         def fetch(context):
             context.report_progress(5, "Checking robots.txt and source safety...")
-            with WebCrawler(CrawlSettings(max_pages=1, max_depth=0)) as crawler:
-                result = crawler.crawl([url], max_pages=1)
+            with WebCrawler(CrawlSettings(max_pages=20, max_depth=2)) as crawler:
+                result = crawler.crawl([url])
             context.raise_if_cancelled()
             if not result.pages:
                 reason = result.failures[0].reason if result.failures else "No page was fetched."
                 raise ValueError(reason)
-            page = result.pages[0]
-            self.content.save(source_id, page)
-            return page
+            candidates = tuple(
+                SourceCandidate(
+                    url=page.requested_url,
+                    domain=domain_from_url(page.requested_url),
+                    title=page.title,
+                    snippet=page.text[:500],
+                    discovery_method="crawl",
+                )
+                for page in result.pages
+            )
+            self.research.add_sources(self.project_id, candidates)
+            sources = {item["url"]: item["id"] for item in self.research.list_sources(self.project_id)}
+            for page in result.pages:
+                page_source_id = sources.get(page.requested_url)
+                if page_source_id is not None:
+                    self.content.save(page_source_id, page)
+            return len(result.pages)
 
         try:
             self.task_manager.submit("source_fetch", fetch)
@@ -138,7 +153,8 @@ class SourcesPage(QWidget):
                     f"{extraction['title']}\n{extraction['final_url']}\n\n"
                     f"{extraction['extracted_text']}"
                 )
-        self.status.setText("Source fetched, extracted and saved.")
+        count = result if isinstance(result, int) else 1
+        self.status.setText(f"Fetched and saved {count} page(s).")
 
     def _task_failed(self, task_id: str, error: str) -> None:
         if task_id == "source_fetch":
