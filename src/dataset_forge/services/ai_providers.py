@@ -12,6 +12,9 @@ import httpx
 
 LOGGER = logging.getLogger(__name__)
 
+RESEARCH_GENERATION_TIMEOUT_SECONDS = 600.0
+OLLAMA_STRUCTURED_OUTPUT_TOKENS = 1024
+
 
 class ProviderKind(StrEnum):
     OLLAMA = "ollama"
@@ -105,6 +108,7 @@ class AIProvider:
                 "messages": messages,
                 "stream": False,
                 "format": "json",
+                "options": {"num_predict": OLLAMA_STRUCTURED_OUTPUT_TOKENS},
             }
         else:
             path = "v1/chat/completions"
