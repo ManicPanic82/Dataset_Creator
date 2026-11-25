@@ -77,6 +77,8 @@ Expected new coverage includes:
 
 ## 5. Research-generation diagnostics
 
+Ollama structured research generation allows up to 10 minutes for a response and requests at most 1,024 generated tokens. This accommodates slower local model loading and inference while keeping the plan response bounded. Provider connection diagnostics retain their short default timeout.
+
 The application log is stored at:
 
 ```text
