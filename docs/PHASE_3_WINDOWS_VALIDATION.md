@@ -13,7 +13,7 @@ git status --short
 Fetch and switch to the new branch:
 
 ```powershell
-git fetch origin feature/phase-3-research-discovery
+git fetch origin
 git switch --track origin/feature/phase-3-research-discovery
 ```
 
