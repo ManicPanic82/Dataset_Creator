@@ -4,6 +4,8 @@ import hashlib
 import ipaddress
 import socket
 import time
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from threading import RLock
 import xml.etree.ElementTree as ET
 from collections import deque
 from dataclasses import dataclass, field
@@ -175,6 +177,9 @@ class WebCrawler:
         self._resolver = resolver
         self._robots_cache: dict[str, RobotFileParser] = {}
         self._last_request: dict[str, float] = {}
+        self._host_locks: dict[str, RLock] = {}
+        self._host_locks_guard = RLock()
+        self._robots_cache_guard = RLock()
 
     def close(self) -> None:
         if self._owns_client:
@@ -186,52 +191,70 @@ class WebCrawler:
     def __exit__(self, *_args: object) -> None:
         self.close()
 
+    def _host_lock(self, hostname: str) -> RLock:
+        with self._host_locks_guard:
+            lock = self._host_locks.get(hostname)
+            if lock is None:
+                lock = RLock()
+                self._host_locks[hostname] = lock
+            return lock
+
     def _request(self, url: str) -> httpx.Response:
         current = normalize_public_url(url)
         for _ in range(6):
             parsed = urlsplit(current)
-            _validate_public_dns(parsed.hostname or "", self._resolver)
-            domain = parsed.hostname or ""
-            elapsed = time.monotonic() - self._last_request.get(domain, 0)
-            wait = self.settings.delay_seconds - elapsed
-            if wait > 0:
-                time.sleep(wait)
-            with self.client.stream(
-                "GET",
-                current,
-                follow_redirects=False,
-                headers={"Accept-Encoding": "identity"},
-            ) as response:
-                self._last_request[domain] = time.monotonic()
-                if response.status_code in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("location")
-                    if location:
-                        current = normalize_public_url(urljoin(current, location))
-                        continue
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    body.extend(chunk)
-                    if len(body) > self.settings.max_content_bytes:
-                        raise ValueError(
-                            "Response exceeded the configured content-size limit."
-                        )
-                # iter_bytes() returns decoded content. Remove the original
-                # encoding metadata so downstream consumers do not try to
-                # decompress the already-decoded body a second time.
-                headers = response.headers.copy()
-                headers.pop("content-encoding", None)
-                headers["content-length"] = str(len(body))
-                return httpx.Response(
-                    status_code=response.status_code,
-                    headers=headers,
-                    content=bytes(body),
-                    request=response.request,
-                    extensions=response.extensions,
-                )
+            hostname = parsed.hostname or ""
+            _validate_public_dns(hostname, self._resolver)
+            # Serialize requests to one host so concurrent workers cannot race
+            # the per-host delay clock. Different hosts remain concurrent.
+            with self._host_lock(hostname):
+                elapsed = time.monotonic() - self._last_request.get(hostname, 0)
+                delay = self.settings.delay_seconds - elapsed
+                if delay > 0:
+                    time.sleep(delay)
+                with self.client.stream(
+                    "GET",
+                    current,
+                    follow_redirects=False,
+                    headers={"Accept-Encoding": "identity"},
+                ) as response:
+                    self._last_request[hostname] = time.monotonic()
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if location:
+                            current = normalize_public_url(urljoin(current, location))
+                            continue
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        body.extend(chunk)
+                        if len(body) > self.settings.max_content_bytes:
+                            raise ValueError(
+                                "Response exceeded the configured content-size limit."
+                            )
+                    # iter_bytes() returns decoded content. Remove the original
+                    # encoding metadata so downstream consumers do not decompress
+                    # the already-decoded body a second time.
+                    headers = response.headers.copy()
+                    headers.pop("content-encoding", None)
+                    headers["content-length"] = str(len(body))
+                    return httpx.Response(
+                        status_code=response.status_code,
+                        headers=headers,
+                        content=bytes(body),
+                        request=response.request,
+                        extensions=response.extensions,
+                    )
         raise ValueError("Too many redirects (maximum 5).")
 
     def _robots(self, origin: str) -> RobotFileParser:
-        if origin not in self._robots_cache:
+        # The host's re-entrant lock prevents duplicate robots requests when
+        # several workers begin on the same origin at once. _request uses the
+        # same lock to preserve the host delay.
+        hostname = urlsplit(origin).hostname or ""
+        with self._host_lock(hostname):
+            cached = self._robots_cache.get(origin)
+            if cached is not None:
+                return cached
             parser = RobotFileParser()
             parser.set_url(urljoin(origin, "/robots.txt"))
             try:
@@ -239,10 +262,7 @@ class WebCrawler:
                 if response.status_code == 200:
                     parser.parse(response.text.splitlines())
                 elif response.status_code == 404:
-                    # RFC 9309 treats a missing robots.txt as unavailable, not as a
-                    # blanket crawl prohibition. Set RobotFileParser's explicit
-                    # allow-all state because an empty or parsed rule set can still
-                    # be interpreted as disallowing requests by some parser paths.
+                    # A missing robots.txt does not prohibit crawling.
                     parser.parse([])
                     parser.allow_all = True
                     parser.disallow_all = False
@@ -251,7 +271,7 @@ class WebCrawler:
             except (httpx.HTTPError, ValueError):
                 parser.parse(["User-agent: *", "Disallow: /"])
             self._robots_cache[origin] = parser
-        return self._robots_cache[origin]
+            return parser
 
     def fetch(self, url: str) -> ExtractedPage:
         requested = normalize_public_url(url)
@@ -358,30 +378,72 @@ class WebCrawler:
         seen: set[str] = set()
         pages: list[ExtractedPage] = []
         failures: list[CrawlFailure] = []
-        while queue and len(pages) < page_limit:
-            if cancelled is not None and cancelled():
-                break
-            url, depth = queue.popleft()
-            if url in seen:
-                continue
-            seen.add(url)
-            origin = f"{urlsplit(url).scheme}://{urlsplit(url).netloc}"
+        pending: dict[Future[ExtractedPage], tuple[str, int]] = {}
+        submitted = 0
+        completed = 0
+        stop_submitting = False
+
+        def fetch_allowed(url: str) -> ExtractedPage:
+            parsed_url = urlsplit(url)
+            origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
             if self.settings.respect_robots_txt and not self._robots(origin).can_fetch(
                 _USER_AGENT, url
             ):
-                failures.append(CrawlFailure(url, "Blocked by robots.txt."))
-                continue
-            try:
-                page = self.fetch(url)
-                pages.append(page)
-                if depth < self.settings.max_depth:
-                    for link in page.links:
-                        parsed_link = urlsplit(link)
-                        link_origin = f"{parsed_link.scheme}://{parsed_link.netloc}"
-                        if link_origin in roots and link not in seen:
-                            queue.append((link, depth + 1))
-            except (httpx.HTTPError, ValueError, RuntimeError) as exc:
-                failures.append(CrawlFailure(url, str(exc)))
-            if progress is not None:
-                progress(len(pages) + len(failures), page_limit)
+                raise PermissionError("Blocked by robots.txt.")
+            return self.fetch(url)
+
+        with ThreadPoolExecutor(
+            max_workers=self.settings.max_concurrent_requests,
+            thread_name_prefix="dataset-forge-crawl",
+        ) as executor:
+            while (queue or pending) and not stop_submitting:
+                if cancelled is not None and cancelled():
+                    stop_submitting = True
+
+                # Reserve page slots for in-flight requests. Failed requests free
+                # their slot, allowing the bounded frontier to continue.
+                while (
+                    not stop_submitting
+                    and queue
+                    and len(pending) < self.settings.max_concurrent_requests
+                    and len(pages) + len(pending) < page_limit
+                ):
+                    url, depth = queue.popleft()
+                    if url in seen:
+                        continue
+                    seen.add(url)
+                    future = executor.submit(fetch_allowed, url)
+                    pending[future] = (url, depth)
+                    submitted += 1
+
+                if not pending:
+                    break
+
+                done, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
+                for future in done:
+                    url, depth = pending.pop(future)
+                    try:
+                        page = future.result()
+                    except PermissionError as exc:
+                        failures.append(CrawlFailure(url, str(exc)))
+                    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+                        failures.append(CrawlFailure(url, str(exc)))
+                    else:
+                        pages.append(page)
+                        if depth < self.settings.max_depth:
+                            for link in page.links:
+                                parsed_link = urlsplit(link)
+                                link_origin = (
+                                    f"{parsed_link.scheme}://{parsed_link.netloc}"
+                                )
+                                if link_origin in roots and link not in seen:
+                                    queue.append((link, depth + 1))
+                    completed += 1
+                    if progress is not None:
+                        progress(completed, page_limit)
+
+            if stop_submitting:
+                for future in pending:
+                    future.cancel()
+
         return CrawlResult(tuple(pages), tuple(failures))
