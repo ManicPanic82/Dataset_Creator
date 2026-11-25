@@ -111,6 +111,19 @@ def test_url_import_returns_candidates_and_reasons() -> None:
 
 
 
+def test_url_import_allows_any_public_domain_by_default() -> None:
+    accepted, rejected = import_url_candidates(
+        "https://docs.python.org/3/\\n"
+        "https://example.com/\\n"
+        "http://127.0.0.1/"
+    )
+
+    assert [item.domain for item in accepted] == ["docs.python.org", "example.com"]
+    assert len(rejected) == 1
+    assert "Local" in rejected[0][1]
+
+
+
 def test_research_plan_rejects_unsafe_domain_filters() -> None:
     with pytest.raises(ValueError, match="Local and private"):
         ResearchPlan.from_dict(
