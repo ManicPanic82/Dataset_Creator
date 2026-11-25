@@ -63,7 +63,7 @@ class NewProjectDialog(QDialog):
 class MainWindow(QMainWindow):
     SECTIONS = [
         ("Overview", "Your research-to-dataset workspace."),
-        ("Research", "Research planning will be added in Phase 3."),
+        ("Research", "Plan research, approve scope, and manage candidate sources."),
         ("Sources", "Source discovery and extraction will be added in Phase 3 and 4."),
         ("Dataset Builder", "Dataset schemas and generation controls will arrive in Phase 6."),
         ("Generation", "Resumable generation workflows will arrive in Phase 6."),
