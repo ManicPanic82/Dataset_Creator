@@ -268,6 +268,7 @@ class MainWindow(QMainWindow):
             kind=kind,
             endpoint=self.endpoint_input.text().strip(),
             api_key=self.api_key_input.text(),
+            timeout=120.0,
         )
         model = self.model_combo.currentText().strip()
         if not model:
