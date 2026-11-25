@@ -85,3 +85,75 @@ def test_fetch_rejects_non_html_content():
     finally:
         crawler.close()
         client.close()
+
+
+
+def test_fetch_enforces_content_limit_while_streaming():
+    payload = b"x" * 2048
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=payload,
+            request=request,
+        )
+    ))
+    crawler = WebCrawler(
+        CrawlSettings(max_content_bytes=1024, delay_seconds=0),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        with pytest.raises(ValueError, match="content-size limit"):
+            crawler.fetch("https://example.org/large")
+    finally:
+        crawler.close()
+        client.close()
+
+
+def test_redirect_to_private_destination_is_rejected():
+    def handler(request):
+        return httpx.Response(
+            302,
+            headers={"location": "http://127.0.0.1/admin"},
+            request=request,
+        )
+
+    def resolver(host, _port, **_kwargs):
+        address = "127.0.0.1" if host == "127.0.0.1" else "93.184.216.34"
+        return [(None, None, None, None, (address, 0))]
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(client=client, resolver=resolver)
+    try:
+        with pytest.raises(ValueError, match="non-public"):
+            crawler.fetch("https://example.org/redirect")
+    finally:
+        crawler.close()
+        client.close()
+
+
+def test_parse_sitemap_returns_only_safe_http_urls():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        '<url><loc>https://example.org/one</loc></url>'
+        '<url><loc>http://127.0.0.1/private</loc></url>'
+        '<url><loc>https://example.org/two</loc></url>'
+        '</urlset>'
+    )
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "application/xml"},
+            text=xml,
+            request=request,
+        )
+    ))
+    crawler = WebCrawler(client=client, resolver=public_resolver)
+    try:
+        urls = crawler.parse_sitemap("https://example.org/sitemap.xml")
+    finally:
+        crawler.close()
+        client.close()
+    assert urls == ("https://example.org/one", "https://example.org/two")
