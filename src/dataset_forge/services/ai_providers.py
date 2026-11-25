@@ -199,7 +199,7 @@ class AIProvider:
             except json.JSONDecodeError as exc:
                 if self.config.kind == ProviderKind.OLLAMA:
                     raise ValueError(
-                        "Ollama returned incomplete or invalid JSON. The response may have "
+                        "Ollama returned content that is not valid JSON. The response may be incomplete or may have "
                         "reached its output token limit; check the Ollama generation metrics."
                     ) from exc
                 raise ValueError("The model response was not valid JSON.") from exc
