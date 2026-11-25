@@ -31,7 +31,9 @@ from dataset_forge.services.ai_providers import (
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 from dataset_forge.storage.research_repository import ResearchRepository
+from dataset_forge.storage.source_content_repository import SourceContentRepository
 from dataset_forge.ui.research_page import ResearchPage
+from dataset_forge.ui.sources_page import SourcesPage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class MainWindow(QMainWindow):
     SECTIONS = [
         ("Overview", "Your research-to-dataset workspace."),
         ("Research", "Plan research, approve scope, and manage candidate sources."),
-        ("Sources", "Source discovery and extraction will be added in Phase 3 and 4."),
+        ("Sources", "Fetch approved public sources and inspect extracted content."),
         ("Dataset Builder", "Dataset schemas and generation controls will arrive in Phase 6."),
         ("Generation", "Resumable generation workflows will arrive in Phase 6."),
         ("Quality Control", "Validation and review tools will arrive in Phase 7."),
@@ -93,6 +95,7 @@ class MainWindow(QMainWindow):
         self.projects = projects
         self.settings = settings
         self.research_repository = ResearchRepository(projects.database)
+        self.source_content_repository = SourceContentRepository(projects.database)
         self.task_manager = TaskManager(self)
         self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
         self.task_manager.task_failed.connect(self._provider_task_failed)
@@ -180,6 +183,13 @@ class MainWindow(QMainWindow):
                     self._research_provider_config,
                 )
                 page_layout.addWidget(self.research_page)
+            elif title == "Sources":
+                self.sources_page = SourcesPage(
+                    self.research_repository,
+                    self.source_content_repository,
+                    self.task_manager,
+                )
+                page_layout.addWidget(self.sources_page)
             elif title == "Settings":
                 self._build_settings_page(page_layout)
             else:
@@ -371,6 +381,7 @@ class MainWindow(QMainWindow):
                 self.current_project_id = project_id
                 self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
                 self.research_page.set_project(project_id)
+                self.sources_page.set_project(project_id)
 
     def closeEvent(self, event) -> None:
         self.task_manager.shutdown()
@@ -429,6 +440,7 @@ class MainWindow(QMainWindow):
         self.current_project_id = project_id
         self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
         self.research_page.set_project(project_id)
+        self.sources_page.set_project(project_id)
         self.settings.set("last_project_id", project_id)
         self.navigation.setCurrentRow(0)
         LOGGER.info("Opened project %s", project_id)
