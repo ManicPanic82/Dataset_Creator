@@ -29,6 +29,8 @@ from dataset_forge.services.ai_providers import (
 )
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
+from dataset_forge.storage.research_repository import ResearchRepository
+from dataset_forge.ui.research_page import ResearchPage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +91,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.projects = projects
         self.settings = settings
+        self.research_repository = ResearchRepository(projects.database)
         self.task_manager = TaskManager(self)
         self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
         self.task_manager.task_failed.connect(self._provider_task_failed)
@@ -168,6 +171,14 @@ class MainWindow(QMainWindow):
                 create_button = QPushButton("Create project")
                 create_button.clicked.connect(self._create_project)
                 page_layout.addWidget(create_button, alignment=Qt.AlignmentFlag.AlignLeft)
+            elif title == "Research":
+                self.research_page = ResearchPage(
+                    self.projects,
+                    self.research_repository,
+                    self.task_manager,
+                    self._research_provider_config,
+                )
+                page_layout.addWidget(self.research_page)
             elif title == "Settings":
                 self._build_settings_page(page_layout)
             else:
@@ -247,6 +258,21 @@ class MainWindow(QMainWindow):
         self.provider_status.setWordWrap(True)
         layout.addWidget(self.provider_status)
         layout.addStretch(1)
+
+    def _research_provider_config(self) -> tuple[ProviderConfig, str]:
+        try:
+            kind = ProviderKind(self.provider_combo.currentData())
+        except ValueError as exc:
+            raise ValueError("Select an AI provider in Settings first.") from exc
+        config = ProviderConfig(
+            kind=kind,
+            endpoint=self.endpoint_input.text().strip(),
+            api_key=self.api_key_input.text(),
+        )
+        model = self.model_combo.currentText().strip()
+        if not model:
+            raise ValueError("Select or enter a default model in Settings first.")
+        return config, model
 
     def _provider_defaults(self, _index: int) -> None:
         try:
@@ -342,6 +368,7 @@ class MainWindow(QMainWindow):
             if project is not None:
                 self.current_project_id = project_id
                 self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
+                self.research_page.set_project(project_id)
 
     def closeEvent(self, event) -> None:
         self.task_manager.shutdown()
@@ -399,6 +426,7 @@ class MainWindow(QMainWindow):
             return
         self.current_project_id = project_id
         self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
+        self.research_page.set_project(project_id)
         self.settings.set("last_project_id", project_id)
         self.navigation.setCurrentRow(0)
         LOGGER.info("Opened project %s", project_id)
