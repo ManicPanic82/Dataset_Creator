@@ -185,14 +185,27 @@ class WebCrawler:
             wait = self.settings.delay_seconds - (time.monotonic() - self._last_request.get(domain, 0))
             if wait > 0:
                 time.sleep(wait)
-            response = self.client.get(current, follow_redirects=False)
-            self._last_request[domain] = time.monotonic()
-            if response.status_code not in {301, 302, 303, 307, 308}:
-                return response
-            location = response.headers.get("location")
-            if not location:
-                return response
-            current = normalize_public_url(urljoin(current, location))
+            with self.client.stream("GET", current, follow_redirects=False) as response:
+                self._last_request[domain] = time.monotonic()
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if location:
+                        current = normalize_public_url(urljoin(current, location))
+                        continue
+                body = bytearray()
+                for chunk in response.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > self.settings.max_content_bytes:
+                        raise ValueError(
+                            "Response exceeded the configured content-size limit."
+                        )
+                return httpx.Response(
+                    status_code=response.status_code,
+                    headers=response.headers,
+                    content=bytes(body),
+                    request=response.request,
+                    extensions=response.extensions,
+                )
         raise ValueError("Too many redirects (maximum 5).")
 
     def _robots(self, origin: str) -> RobotFileParser:
