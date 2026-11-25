@@ -122,7 +122,6 @@ def test_structured_generation_rejects_non_json(monkeypatch) -> None:
         provider.generate_json("model-a", "system", "user")
 
 
-
 def test_ollama_generation_logs_timing_and_runtime_metrics(monkeypatch, caplog) -> None:
     def fake_post(url, **kwargs):
         return httpx.Response(
@@ -147,9 +146,10 @@ def test_ollama_generation_logs_timing_and_runtime_metrics(monkeypatch, caplog) 
     )
 
     with caplog.at_level("INFO"):
-        assert provider.generate_json("qwen3.5:4b", "private system prompt", "private user prompt") == {
-            "ok": True
-        }
+        result = provider.generate_json(
+            "qwen3.5:4b", "private system prompt", "private user prompt"
+        )
+        assert result == {"ok": True}
 
     messages = "\\n".join(record.getMessage() for record in caplog.records)
     assert "Structured generation started" in messages
