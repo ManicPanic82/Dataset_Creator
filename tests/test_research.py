@@ -108,3 +108,16 @@ def test_url_import_returns_candidates_and_reasons() -> None:
     assert len(rejected) == 2
     assert "Local" in rejected[0][1]
     assert "domain filters" in rejected[1][1]
+
+
+
+def test_research_plan_rejects_unsafe_domain_filters() -> None:
+    with pytest.raises(ValueError, match="Local and private"):
+        ResearchPlan.from_dict(
+            {
+                "objective": "Research",
+                "scope": "Scope",
+                "topics": ["topic"],
+                "preferred_domains": ["localhost"],
+            }
+        )
