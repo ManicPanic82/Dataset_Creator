@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+
+LOGGER = logging.getLogger(__name__)
 
 
 class TaskSignals(QObject):
@@ -38,8 +42,9 @@ class TaskCancelled(Exception):
 
 
 class _Task(QRunnable):
-    def __init__(self, function: Callable[[TaskContext], Any]) -> None:
+    def __init__(self, task_id: str, function: Callable[[TaskContext], Any]) -> None:
         super().__init__()
+        self.task_id = task_id
         self.function = function
         self.signals = TaskSignals()
         self.cancel_event = threading.Event()
@@ -48,6 +53,8 @@ class _Task(QRunnable):
         self.cancel_event.set()
 
     def run(self) -> None:
+        started = time.perf_counter()
+        LOGGER.info("Background task worker started: task=%s", self.task_id)
         context = TaskContext(
             self.cancel_event,
             lambda percent, message: self.signals.progress.emit(percent, message),
@@ -56,10 +63,25 @@ class _Task(QRunnable):
             context.raise_if_cancelled()
             result = self.function(context)
             context.raise_if_cancelled()
+            LOGGER.info(
+                "Background task worker completed: task=%s elapsed=%.2fs",
+                self.task_id,
+                time.perf_counter() - started,
+            )
             self.signals.succeeded.emit(result)
         except TaskCancelled:
+            LOGGER.info(
+                "Background task cancelled: task=%s elapsed=%.2fs",
+                self.task_id,
+                time.perf_counter() - started,
+            )
             self.signals.failed.emit("Task cancelled.")
-        except Exception as exc:  # surfaced to the UI and logged by the caller
+        except Exception as exc:
+            LOGGER.exception(
+                "Background task failed: task=%s elapsed=%.2fs",
+                self.task_id,
+                time.perf_counter() - started,
+            )
             self.signals.failed.emit(f"{type(exc).__name__}: {exc}")
         finally:
             self.signals.finished.emit()
@@ -81,7 +103,8 @@ class TaskManager(QObject):
     def submit(self, task_id: str, function: Callable[[TaskContext], Any]) -> None:
         if task_id in self._tasks:
             raise ValueError(f"Task already exists: {task_id}")
-        task = _Task(function)
+        LOGGER.info("Background task queued: task=%s", task_id)
+        task = _Task(task_id, function)
         self._tasks[task_id] = task
         task.signals.progress.connect(
             lambda percent, message, key=task_id:
