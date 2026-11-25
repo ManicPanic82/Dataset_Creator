@@ -372,3 +372,51 @@ def test_crawl_never_exceeds_configured_worker_count():
     assert len(result.pages) == 4
     assert maximum_active <= 2
     assert maximum_active == 2
+
+
+
+def test_crawl_serializes_requests_to_the_same_host():
+    active = 0
+    maximum_active = 0
+    guard = threading.Lock()
+
+    def handler(request):
+        nonlocal active, maximum_active
+        with guard:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            threading.Event().wait(0.03)
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text="<main><p>Same-host page.</p></main>",
+                request=request,
+            )
+        finally:
+            with guard:
+                active -= 1
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    crawler = WebCrawler(
+        CrawlSettings(
+            max_pages=2,
+            max_depth=0,
+            max_concurrent_requests=2,
+            delay_seconds=0,
+            respect_robots_txt=False,
+        ),
+        client=client,
+        resolver=public_resolver,
+    )
+    try:
+        result = crawler.crawl(
+            ["https://same.example/one", "https://same.example/two"]
+        )
+    finally:
+        crawler.close()
+        client.close()
+
+    assert len(result.pages) == 2
+    assert result.failures == ()
+    assert maximum_active == 1
