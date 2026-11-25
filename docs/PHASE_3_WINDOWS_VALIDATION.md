@@ -82,3 +82,35 @@ git status --short
 ```
 
 Do not commit unrelated local modifications as part of Phase 3 validation.
+
+
+## 5. Research-generation diagnostics
+
+The application log is stored at:
+
+```text
+%LOCALAPPDATA%\DatasetForgeAI\logs\dataset_forge.log
+```
+
+When diagnosing a slow or failed research-plan request, reproduce it once and inspect the newest log entries. The diagnostic sequence records:
+
+- Research request metadata: project, provider, model, configured timeout, and objective character count. Prompt contents and API keys are not logged.
+- Background task queued, worker started, worker completed or failed, and elapsed time.
+- Provider request start, endpoint host, timeout, prompt character counts, HTTP response status, response size, and elapsed time.
+- Ollama runtime metrics when returned: model load duration, prompt evaluation duration/count, and response evaluation duration/count.
+- Full exception traceback and exception type when provider generation fails.
+
+Use PowerShell to inspect the latest entries:
+
+```powershell
+$log = Join-Path $env:LOCALAPPDATA "DatasetForgeAI\logs\dataset_forge.log"
+Get-Content $log -Tail 120
+```
+
+For a focused view of research and provider diagnostics:
+
+```powershell
+Select-String -Path $log -Pattern "Research plan|Background task|Structured generation|Ollama generation metrics|ReadTimeout|Timeout"
+```
+
+Include the entries from **Research plan requested** through the final failure or completion when reporting a problem. This makes it possible to distinguish queue delay, worker delay, model loading/inference time, HTTP timeout, and JSON validation failures.
