@@ -177,7 +177,8 @@ class ResearchPage(QWidget):
             return
         if self._pending_project_id != self.project_id:
             self.status_label.setText(
-                "Plan generation completed for a different project; reopen that project to review it."
+                "Plan generation completed for a different project; "
+                "reopen that project to review it."
             )
             return
         if not isinstance(result, ResearchPlan):
