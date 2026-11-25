@@ -44,7 +44,7 @@ def test_fetch_rejects_non_public_dns_before_request():
         (None, None, None, None, ("127.0.0.1", 0))
     ])
     try:
-        with pytest.raises(ValueError, match="Local, private, and reserved"):
+        with pytest.raises(ValueError, match="non-public network address"):
             crawler.fetch("https://example.org/")
     finally:
         crawler.close()
@@ -126,7 +126,7 @@ def test_redirect_to_private_destination_is_rejected():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     crawler = WebCrawler(client=client, resolver=resolver)
     try:
-        with pytest.raises(ValueError, match="non-public"):
+        with pytest.raises(ValueError, match="Local, private, and reserved"):
             crawler.fetch("https://example.org/redirect")
     finally:
         crawler.close()
