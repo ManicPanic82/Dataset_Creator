@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from dataset_forge.services.ai_providers import (
+    RESEARCH_GENERATION_TIMEOUT_SECONDS,
     ProviderConfig,
     ProviderDiagnostic,
     ProviderKind,
@@ -268,7 +269,7 @@ class MainWindow(QMainWindow):
             kind=kind,
             endpoint=self.endpoint_input.text().strip(),
             api_key=self.api_key_input.text(),
-            timeout=120.0,
+            timeout=RESEARCH_GENERATION_TIMEOUT_SECONDS,
         )
         model = self.model_combo.currentText().strip()
         if not model:
