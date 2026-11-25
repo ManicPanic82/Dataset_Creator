@@ -165,7 +165,12 @@ class WebCrawler:
             timeout=self.settings.request_timeout,
             follow_redirects=False,
             trust_env=False,
-            headers={"User-Agent": _USER_AGENT, "Accept": "text/html,application/xhtml+xml"},
+            headers={
+                "User-Agent": _USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml",
+                # Avoid broken intermediary gzip responses; payloads remain size-limited.
+                "Accept-Encoding": "identity",
+            },
         )
         self._resolver = resolver
         self._robots_cache: dict[str, RobotFileParser] = {}
@@ -205,9 +210,15 @@ class WebCrawler:
                         raise ValueError(
                             "Response exceeded the configured content-size limit."
                         )
+                # iter_bytes() returns decoded content. Remove the original
+                # encoding metadata so downstream consumers do not try to
+                # decompress the already-decoded body a second time.
+                headers = response.headers.copy()
+                headers.pop("content-encoding", None)
+                headers["content-length"] = str(len(body))
                 return httpx.Response(
                     status_code=response.status_code,
-                    headers=response.headers,
+                    headers=headers,
                     content=bytes(body),
                     request=response.request,
                     extensions=response.extensions,
