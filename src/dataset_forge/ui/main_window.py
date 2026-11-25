@@ -4,7 +4,7 @@ import logging
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
+    QComboBox,\n    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMainWindow,
-    QMessageBox,
+    QMessageBox,\n    QPlainTextEdit,
     QPushButton,
     QStackedWidget,
     QTextEdit,
@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dataset_forge.services.task_manager import TaskManager
+from dataset_forge.services.ai_providers import ProviderConfig, ProviderKind, create_provider\nfrom dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 
 LOGGER = logging.getLogger(__name__)
@@ -179,6 +179,67 @@ class MainWindow(QMainWindow):
             #placeholder { color: #aab8c8; font-size: 16px; padding: 18px 0; }
             """
         )
+
+    def _provider_defaults(self, index: int) -> None:
+        kind = self.provider_combo.currentData()
+        if kind == ProviderKind.OLLAMA.value:
+            self.endpoint_input.setText("http://localhost:11434")
+        elif kind == ProviderKind.LM_STUDIO.value:
+            self.endpoint_input.setText("http://localhost:1234")
+        else:
+            if not self.endpoint_input.text().startswith("http"):
+                self.endpoint_input.setText("https://api.openai.com")
+
+    def _load_provider_settings(self) -> None:
+        kind = self.settings.get("ai_provider", ProviderKind.OLLAMA.value)
+        index = self.provider_combo.findData(kind)
+        if index >= 0:
+            self.provider_combo.setCurrentIndex(index)
+        defaults = {
+            ProviderKind.OLLAMA.value: "http://localhost:11434",
+            ProviderKind.LM_STUDIO.value: "http://localhost:1234",
+            ProviderKind.OPENAI_COMPATIBLE.value: "https://api.openai.com",
+        }
+        self.endpoint_input.setText(self.settings.get("ai_endpoint", defaults.get(kind, "")))
+        model = self.settings.get("ai_model", "")
+        if model:
+            self.model_combo.setCurrentText(model)
+
+    def _save_provider_settings(self) -> None:
+        self.settings.set("ai_provider", self.provider_combo.currentData())
+        self.settings.set("ai_endpoint", self.endpoint_input.text().strip())
+        self.settings.set("ai_model", self.model_combo.currentText().strip())
+        self.provider_status.setText("Provider settings saved. API key is not stored.")
+
+    def _test_provider_connection(self) -> None:
+        try:
+            kind = ProviderKind(self.provider_combo.currentData())
+        except ValueError:
+            self.provider_status.setText("Unsupported provider selection.")
+            return
+        config = ProviderConfig(
+            kind=kind,
+            endpoint=self.endpoint_input.text().strip(),
+            api_key=self.api_key_input.text(),
+        )
+        self.provider_status.setText("Connecting...")
+        self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
+        self.task_manager.task_failed.connect(self._provider_task_failed)
+        self.task_manager.submit("provider_diagnostic", lambda _context: create_provider(config).diagnose())
+
+    def _provider_task_succeeded(self, task_id: str, result: object) -> None:
+        if task_id != "provider_diagnostic":
+            return
+        self.provider_status.setText(result.message)
+        self.model_combo.clear()
+        self.model_combo.addItems(list(result.models))
+        saved_model = self.settings.get("ai_model", "")
+        if saved_model:
+            self.model_combo.setCurrentText(saved_model)
+
+    def _provider_task_failed(self, task_id: str, error: str) -> None:
+        if task_id == "provider_diagnostic":
+            self.provider_status.setText(error)
 
     def _change_section(self, index: int) -> None:
         if index < 0:
