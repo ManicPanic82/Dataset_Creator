@@ -106,6 +106,7 @@ class SourcesPage(QWidget):
             self.status.setText("Accept this candidate in Research before fetching it.")
             return
         url = source["url"]
+        project_id = self.project_id
         self._active_source_id = source_id
 
         def fetch(context):
@@ -126,8 +127,11 @@ class SourcesPage(QWidget):
                 )
                 for page in result.pages
             )
-            self.research.add_sources(self.project_id, candidates)
-            sources = {item["url"]: item["id"] for item in self.research.list_sources(self.project_id)}
+            self.research.add_sources(project_id, candidates)
+            sources = {
+                item["url"]: item["id"]
+                for item in self.research.list_sources(project_id)
+            }
             for page in result.pages:
                 page_source_id = sources.get(page.requested_url)
                 if page_source_id is not None:
