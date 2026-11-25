@@ -10,14 +10,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QPlainTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from dataset_forge.services.ai_providers import ProviderConfig, ProviderKind
+from dataset_forge.services.ai_providers import ProviderConfig, ProviderKind, create_provider
 from dataset_forge.services.research import (
     DomainFilter,
     ResearchPlan,
@@ -155,15 +154,10 @@ class ResearchPage(QWidget):
             return
         try:
             config, model = self.provider_config_getter()
-            planner = ResearchPlanner  # Resolve the provider in the background worker.
             self.task_manager.submit(
                 "research_plan",
-                lambda _context: planner(
-                    __import__(
-                        "dataset_forge.services.ai_providers",
-                        fromlist=["create_provider"],
-                    ).create_provider(config),
-                    model,
+                lambda _context: ResearchPlanner(
+                    create_provider(config), model
                 ).create_plan(objective),
             )
         except (ValueError, TypeError) as exc:
