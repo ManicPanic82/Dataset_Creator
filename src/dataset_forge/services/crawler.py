@@ -328,8 +328,9 @@ class WebCrawler:
                 continue
             seen.add(url)
             origin = f"{urlsplit(url).scheme}://{urlsplit(url).netloc}"
-            allowed = self._robots(origin).can_fetch(_USER_AGENT, url)
-            if self.settings.respect_robots_txt and not allowed:
+            if self.settings.respect_robots_txt and not self._robots(origin).can_fetch(
+                _USER_AGENT, url
+            ):
                 failures.append(CrawlFailure(url, "Blocked by robots.txt."))
                 continue
             try:
