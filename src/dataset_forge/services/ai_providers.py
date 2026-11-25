@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 import httpx
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ProviderKind(StrEnum):
@@ -110,35 +114,95 @@ class AIProvider:
                 "response_format": {"type": "json_object"},
             }
 
-        response = httpx.post(
-            f"{endpoint}/{path}",
-            headers=self._headers(),
-            json=body,
-            timeout=self.config.timeout,
+        url = f"{endpoint}/{path}"
+        started = time.perf_counter()
+        LOGGER.info(
+            "Structured generation started: provider=%s model=%s endpoint=%s "
+            "timeout=%.1fs system_prompt_chars=%d user_prompt_chars=%d",
+            self.config.kind.value,
+            clean_model,
+            endpoint,
+            self.config.timeout,
+            len(system_prompt),
+            len(user_prompt),
         )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise ValueError("The provider returned an invalid generation response.")
-
-        if self.config.kind == ProviderKind.OLLAMA:
-            message = payload.get("message")
-            content = message.get("content") if isinstance(message, dict) else None
-        else:
-            choices = payload.get("choices")
-            choice = choices[0] if isinstance(choices, list) and choices else None
-            message = choice.get("message") if isinstance(choice, dict) else None
-            content = message.get("content") if isinstance(message, dict) else None
-
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("The model returned no structured content.")
         try:
-            result = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise ValueError("The model response was not valid JSON.") from exc
-        if not isinstance(result, dict):
-            raise ValueError("The model response must be a JSON object.")
-        return result
+            response = httpx.post(
+                url,
+                headers=self._headers(),
+                json=body,
+                timeout=self.config.timeout,
+            )
+            elapsed = time.perf_counter() - started
+            LOGGER.info(
+                "Structured generation HTTP response received: provider=%s model=%s "
+                "status=%d elapsed=%.2fs response_bytes=%d",
+                self.config.kind.value,
+                clean_model,
+                response.status_code,
+                elapsed,
+                len(response.content),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("The provider returned an invalid generation response.")
+
+            if self.config.kind == ProviderKind.OLLAMA:
+                message = payload.get("message")
+                content = message.get("content") if isinstance(message, dict) else None
+                metrics = {
+                    key: payload.get(key)
+                    for key in (
+                        "total_duration",
+                        "load_duration",
+                        "prompt_eval_duration",
+                        "prompt_eval_count",
+                        "eval_duration",
+                        "eval_count",
+                    )
+                    if payload.get(key) is not None
+                }
+                if metrics:
+                    LOGGER.info(
+                        "Ollama generation metrics: model=%s metrics=%s",
+                        clean_model,
+                        metrics,
+                    )
+            else:
+                choices = payload.get("choices")
+                choice = choices[0] if isinstance(choices, list) and choices else None
+                message = choice.get("message") if isinstance(choice, dict) else None
+                content = message.get("content") if isinstance(message, dict) else None
+
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("The model returned no structured content.")
+            try:
+                result = json.loads(content)
+            except json.JSONDecodeError as exc:
+                raise ValueError("The model response was not valid JSON.") from exc
+            if not isinstance(result, dict):
+                raise ValueError("The model response must be a JSON object.")
+
+            LOGGER.info(
+                "Structured generation completed: provider=%s model=%s elapsed=%.2fs "
+                "json_chars=%d",
+                self.config.kind.value,
+                clean_model,
+                time.perf_counter() - started,
+                len(content),
+            )
+            return result
+        except Exception:
+            LOGGER.exception(
+                "Structured generation failed: provider=%s model=%s elapsed=%.2fs "
+                "timeout=%.1fs",
+                self.config.kind.value,
+                clean_model,
+                time.perf_counter() - started,
+                self.config.timeout,
+            )
+            raise
 
     def diagnose(self) -> ProviderDiagnostic:
         try:
