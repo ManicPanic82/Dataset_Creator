@@ -179,7 +179,6 @@ class WebCrawler:
         self._last_request: dict[str, float] = {}
         self._host_locks: dict[str, RLock] = {}
         self._host_locks_guard = RLock()
-        self._robots_cache_guard = RLock()
 
     def close(self) -> None:
         if self._owns_client:
