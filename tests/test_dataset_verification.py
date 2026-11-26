@@ -220,3 +220,38 @@ def test_verification_rejects_claim_not_present_in_answer():
             },
             KNOWLEDGE,
         )
+
+
+def test_batch_verification_continues_after_an_individual_provider_failure():
+    class IntermittentProvider:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_json(self, *, model, system_prompt, user_prompt):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary provider failure")
+            return _report(verdict="pass", score=98, findings=[])
+
+    provider = IntermittentProvider()
+    service = DatasetVerificationService(provider, "model")
+    record = {
+        "dataset_type": "question_answer",
+        "payload": {
+            "question": "What must nested exceptions be?",
+            "answer": "They must be exception instances, not exception types.",
+        },
+        "provenance": KNOWLEDGE,
+    }
+    progress = []
+
+    result = service.verify_batch(
+        [{"id": "record-1", **record}, {"id": "record-2", **record}],
+        lambda index, total, record_id: progress.append((index, total, record_id)),
+    )
+
+    assert result["total"] == 2
+    assert "record-1" in result["errors"]
+    assert "temporary provider failure" in result["errors"]["record-1"]
+    assert result["reports"]["record-2"]["verdict"] == "pass"
+    assert progress == [(1, 2, "record-1"), (2, 2, "record-2")]
