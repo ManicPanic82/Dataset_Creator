@@ -374,6 +374,66 @@ class DatasetBuilderPage(QWidget):
         self.verify_button.setEnabled(False)
         self.status.setText(f"Running advisory AI verification with {model}...")
 
+
+    def _verify_all_records(self) -> None:
+        if self.project_id is None:
+            self.status.setText("Open a project before running batch verification.")
+            return
+        records = self.record_repository.list_for_project(self.project_id)
+        if not records:
+            self.status.setText("There are no generated records to review.")
+            return
+        try:
+            config, model = self.provider_config()
+            provider = create_provider(config)
+        except (ValueError, TypeError) as exc:
+            self.status.setText(f"Configure a provider and model in Settings: {exc}")
+            return
+
+        records_to_verify = [
+            record for record in records
+            if record["id"] not in self.verification_reports
+        ]
+        service = DatasetVerificationService(provider, model)
+
+        def verify_all(context):
+            quality_reports = {}
+            total = len(records)
+            for index, record in enumerate(records, start=1):
+                quality_reports[record["id"]] = DatasetQualityService.assess(
+                    record["dataset_type"], record["payload"], record["provenance"]
+                )
+                context.report_progress(
+                    int(index / max(total, 1) * 10),
+                    f"Heuristic screening {index}/{total}",
+                )
+
+            def report_progress(index, count, _record_id):
+                context.report_progress(
+                    10 + int(index / max(count, 1) * 90),
+                    f"AI verification {index}/{count}",
+                )
+
+            batch = service.verify_batch(records_to_verify, report_progress)
+            return {
+                "quality_reports": quality_reports,
+                "reports": batch["reports"],
+                "errors": batch["errors"],
+                "total": total,
+                "verified_this_run": len(records_to_verify),
+            }
+
+        try:
+            self.task_manager.submit(self.BATCH_VERIFICATION_TASK_ID, verify_all)
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        self.verify_button.setEnabled(False)
+        self.verify_all_button.setEnabled(False)
+        self.status.setText(
+            f"Preparing batch review of {len(records)} record(s) with {model}..."
+        )
+
     def _set_review(self, status: str) -> None:
         if self.active_record_id is None:
             self.status.setText("Select a generated record first.")
