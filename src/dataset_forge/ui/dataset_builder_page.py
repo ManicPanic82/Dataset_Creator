@@ -51,6 +51,7 @@ class DatasetBuilderPage(QWidget):
         self.active_record_id: str | None = None
         self.verification_reports: dict[str, dict] = {}
         self.verification_errors: dict[str, str] = {}
+        self.quality_reports: dict[str, dict] = {}
         self._build_ui()
         self.task_manager.task_succeeded.connect(self._task_succeeded)
         self.task_manager.task_failed.connect(self._task_failed)
@@ -372,6 +373,7 @@ class DatasetBuilderPage(QWidget):
             self.status.setText(str(exc))
             return
         self.verify_button.setEnabled(False)
+        self.verify_all_button.setEnabled(False)
         self.status.setText(f"Running advisory AI verification with {model}...")
 
 
@@ -447,11 +449,31 @@ class DatasetBuilderPage(QWidget):
         self.status.setText(f"Dataset record marked {status}.")
 
     def _task_succeeded(self, task_id: str, result: object) -> None:
+        if task_id == self.BATCH_VERIFICATION_TASK_ID:
+            if isinstance(result, dict):
+                self.verification_reports.update(result.get("reports", {}))
+                self.verification_errors.update(result.get("errors", {}))
+                self.quality_reports.update(result.get("quality_reports", {}))
+                current = self.record_list.currentItem()
+                if current is not None:
+                    self._show_record(current, None)
+                reports = result.get("reports", {})
+                errors = result.get("errors", {})
+                verdicts = [report["verdict"] for report in reports.values()]
+                self.status.setText(
+                    f"Batch review complete: {result.get('total', 0)} record(s). "
+                    f"AI pass {verdicts.count('pass')} · "
+                    f"review {verdicts.count('review')} · "
+                    f"fail {verdicts.count('fail')} · errors {len(errors)}. "
+                    f"Verified this run: {result.get('verified_this_run', 0)}."
+                )
+            return
         if task_id == self.VERIFICATION_TASK_ID:
             if isinstance(result, dict) and isinstance(result.get("report"), dict):
                 record_id = result.get("record_id")
                 if isinstance(record_id, str):
                     self.verification_reports[record_id] = result["report"]
+                    self.verification_errors.pop(record_id, None)
                     if self.active_record_id == record_id:
                         current = self.record_list.currentItem()
                         self._show_record(current, None)
@@ -466,7 +488,7 @@ class DatasetBuilderPage(QWidget):
         )
 
     def _task_progress(self, task_id: str, percent: int, message: str) -> None:
-        if task_id in {self.TASK_ID, self.VERIFICATION_TASK_ID}:
+        if task_id in {self.TASK_ID, self.VERIFICATION_TASK_ID, self.BATCH_VERIFICATION_TASK_ID}:
             self.status.setText(f"{percent}% · {message}")
 
     def _task_failed(self, task_id: str, error: str) -> None:
@@ -474,9 +496,15 @@ class DatasetBuilderPage(QWidget):
             self.status.setText(f"Dataset generation failed: {error}")
         elif task_id == self.VERIFICATION_TASK_ID:
             self.status.setText(f"AI verification failed: {error}")
+        elif task_id == self.BATCH_VERIFICATION_TASK_ID:
+            self.status.setText(f"Batch AI verification failed: {error}")
 
     def _task_finished(self, task_id: str) -> None:
         if task_id == self.TASK_ID:
             self.generate_button.setEnabled(True)
         elif task_id == self.VERIFICATION_TASK_ID:
             self.verify_button.setEnabled(True)
+            self.verify_all_button.setEnabled(True)
+        elif task_id == self.BATCH_VERIFICATION_TASK_ID:
+            self.verify_button.setEnabled(True)
+            self.verify_all_button.setEnabled(True)
