@@ -440,6 +440,7 @@ class DatasetBuilderPage(QWidget):
                 )
 
             batch = service.verify_batch(records_to_verify, report_progress)
+            context.report_progress(100, "Batch review complete")
             return {
                 "quality_reports": quality_reports,
                 "reports": batch["reports"],
