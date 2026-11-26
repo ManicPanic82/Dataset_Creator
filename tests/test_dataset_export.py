@@ -172,8 +172,10 @@ def test_export_splits_are_reproducible_and_keep_provenance(export_setup, tmp_pa
     first = service.export_splits(project["id"], "question_answer", tmp_path / "one")
     service.export_splits(project["id"], "question_answer", tmp_path / "two")
 
-    assert {name: result["count"] for name, result in first.items() if name in
-            {"train", "validation", "test"}} == {"train": 8, "validation": 1, "test": 1}
+    counts = {name: first[name]["count"] for name in ("train", "validation", "test")}
+    # All ten records share one knowledge item, so they must remain in one split.
+    assert sorted(counts.values()) == [0, 0, 10]
+    assert first["groups"] == 1
     for name in ("train", "validation", "test"):
         first_path = tmp_path / "one" / f"{name}.jsonl"
         rows = [json.loads(line) for line in first_path.read_text(encoding="utf-8").splitlines()]
