@@ -107,6 +107,7 @@ class AIProvider:
                 "model": clean_model,
                 "messages": messages,
                 "stream": False,
+                "think": False,
                 "format": "json",
                 "options": {"num_predict": OLLAMA_STRUCTURED_OUTPUT_TOKENS},
             }
