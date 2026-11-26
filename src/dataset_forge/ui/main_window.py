@@ -33,6 +33,7 @@ from dataset_forge.services.ai_providers import (
     create_provider,
 )
 from dataset_forge.services.dataset_export import SPLIT_PROFILES, DatasetExportService
+from dataset_forge.services.dataset_integrity import DatasetIntegrityService
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
@@ -247,6 +248,9 @@ class MainWindow(QMainWindow):
                 split_button = QPushButton("Export train / validation / test splits")
                 split_button.clicked.connect(self._export_splits)
                 page_layout.addWidget(split_button, alignment=Qt.AlignmentFlag.AlignLeft)
+                verify_button = QPushButton("Verify an existing export")
+                verify_button.clicked.connect(self._verify_export)
+                page_layout.addWidget(verify_button, alignment=Qt.AlignmentFlag.AlignLeft)
                 self.export_status = QLabel(
                     "Exports include accepted records of the selected format only."
                 )
@@ -620,6 +624,32 @@ class MainWindow(QMainWindow):
         message += f"\nManifest: {result['manifest_path']}"
         self.export_status.setText(f"{message}\nDataset: {result['path']}")
         QMessageBox.information(self, "Dataset export complete", message)
+
+    def _verify_export(self) -> None:
+        manifest_path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Select dataset export manifest",
+            "",
+            "Dataset manifest (*.manifest.json);;JSON files (*.json)",
+        )
+        if not manifest_path:
+            return
+        result = DatasetIntegrityService.verify_manifest(manifest_path)
+        if result["success"]:
+            message = (
+                f"Export integrity verified. Checked {result['checked_files']} file(s) "
+                f"and {result['total_records']} JSONL row(s)."
+            )
+            self.export_status.setText(message)
+            QMessageBox.information(self, "Export verified", message)
+            return
+        details = "\n".join(result["errors"])
+        message = (
+            f"Export verification failed. Checked {result['checked_files']} file(s)."
+            f"\n{details}"
+        )
+        self.export_status.setText(message)
+        QMessageBox.warning(self, "Export verification failed", message)
 
     def _create_project(self) -> None:
         dialog = NewProjectDialog(self)
