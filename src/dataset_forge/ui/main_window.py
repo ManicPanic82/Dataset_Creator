@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -201,9 +202,18 @@ class MainWindow(QMainWindow):
                 self.export_provenance_check.setChecked(True)
                 export_form.addRow("Provenance", self.export_provenance_check)
                 page_layout.addLayout(export_form)
+                split_form = QFormLayout()
+                self.split_seed = QSpinBox()
+                self.split_seed.setRange(0, 2147483647)
+                self.split_seed.setValue(42)
+                split_form.addRow("Shuffle seed", self.split_seed)
+                page_layout.addLayout(split_form)
                 export_button = QPushButton("Export accepted records")
                 export_button.clicked.connect(self._export_dataset)
                 page_layout.addWidget(export_button, alignment=Qt.AlignmentFlag.AlignLeft)
+                split_button = QPushButton("Export train / validation / test splits")
+                split_button.clicked.connect(self._export_splits)
+                page_layout.addWidget(split_button, alignment=Qt.AlignmentFlag.AlignLeft)
                 self.export_status = QLabel(
                     "Exports include accepted records of the selected format only."
                 )
@@ -468,6 +478,40 @@ class MainWindow(QMainWindow):
             self.project_management_list.item(
                 self.project_management_list.count() - 1
             ).setData(Qt.ItemDataRole.UserRole, project["id"])
+
+    def _export_splits(self) -> None:
+        if self.current_project_id is None:
+            self.export_status.setText("Open a project before exporting splits.")
+            return
+        directory = QFileDialog.getExistingDirectory(
+            self, "Choose split export directory"
+        )
+        if not directory:
+            return
+        dataset_type = self.export_format_combo.currentData()
+        try:
+            result = DatasetExportService(
+                self.dataset_record_repository
+            ).export_splits(
+                self.current_project_id,
+                dataset_type,
+                directory,
+                seed=self.split_seed.value(),
+                include_provenance=self.export_provenance_check.isChecked(),
+            )
+        except (OSError, ValueError) as exc:
+            self.export_status.setText(f"Split export failed: {exc}")
+            QMessageBox.warning(self, "Split export failed", str(exc))
+            return
+        message = (
+            f"Split export complete. Seed {result['seed']}. "
+            f"Train {result['train']['count']} · "
+            f"Validation {result['validation']['count']} · "
+            f"Test {result['test']['count']}. "
+            f"Skipped {result['skipped']} invalid record(s)."
+        )
+        self.export_status.setText(message)
+        QMessageBox.information(self, "Split export complete", message)
 
     def _export_dataset(self) -> None:
         if self.current_project_id is None:
