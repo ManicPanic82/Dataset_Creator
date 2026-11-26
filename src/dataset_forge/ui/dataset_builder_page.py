@@ -4,12 +4,16 @@ import json
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -23,7 +27,10 @@ from dataset_forge.services.dataset_generation import DatasetGenerationService
 from dataset_forge.services.dataset_quality import DatasetQualityService
 from dataset_forge.services.dataset_verification import DatasetVerificationService
 from dataset_forge.services.knowledge_context import KnowledgeContextService
-from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
+from dataset_forge.storage.dataset_record_repository import (
+    DatasetRecordRepository,
+    is_valid_dataset_payload,
+)
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
 
 
@@ -106,6 +113,9 @@ class DatasetBuilderPage(QWidget):
         records_layout.setContentsMargins(0, 0, 0, 0)
         records_layout.addWidget(QLabel("Generated records"))
         self.record_list = QListWidget()
+        self.record_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
         self.record_list.currentItemChanged.connect(self._show_record)
         records_layout.addWidget(self.record_list, 1)
         self.quality_summary = QTextEdit()
@@ -124,6 +134,9 @@ class DatasetBuilderPage(QWidget):
         )
         records_layout.addWidget(self.record_details, 2)
         review_actions = QHBoxLayout()
+        self.edit_button = QPushButton("Edit JSON")
+        self.edit_button.clicked.connect(self._edit_record)
+        review_actions.addWidget(self.edit_button)
         self.accept_button = QPushButton("Accept")
         self.accept_button.clicked.connect(lambda: self._set_review("accepted"))
         review_actions.addWidget(self.accept_button)
@@ -140,6 +153,23 @@ class DatasetBuilderPage(QWidget):
         self.verify_all_button.clicked.connect(self._verify_all_records)
         review_actions.addWidget(self.verify_all_button)
         records_layout.addLayout(review_actions)
+        bulk_actions = QHBoxLayout()
+        self.accept_selected_button = QPushButton("Accept selected")
+        self.accept_selected_button.clicked.connect(
+            lambda: self._set_selected_review("accepted")
+        )
+        bulk_actions.addWidget(self.accept_selected_button)
+        self.reject_selected_button = QPushButton("Reject selected")
+        self.reject_selected_button.clicked.connect(
+            lambda: self._set_selected_review("rejected")
+        )
+        bulk_actions.addWidget(self.reject_selected_button)
+        self.pending_selected_button = QPushButton("Reset selected")
+        self.pending_selected_button.clicked.connect(
+            lambda: self._set_selected_review("pending_review")
+        )
+        bulk_actions.addWidget(self.pending_selected_button)
+        records_layout.addLayout(bulk_actions)
         splitter.addWidget(records_panel)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
@@ -397,6 +427,7 @@ class DatasetBuilderPage(QWidget):
             return
         self.verify_button.setEnabled(False)
         self.verify_all_button.setEnabled(False)
+        self._set_review_controls_enabled(False)
         self.status.setText(f"Running advisory AI verification with {model}...")
 
     def _verify_all_records(self) -> None:
@@ -458,6 +489,111 @@ class DatasetBuilderPage(QWidget):
         self.status.setText(
             f"Preparing batch review of {len(records)} record(s) with {model}..."
         )
+
+    def _edit_record(self) -> None:
+        if self.active_record_id is None:
+            self.status.setText("Select a record before editing.")
+            return
+        record = self.record_repository.get(self.active_record_id)
+        if record is None:
+            self.status.setText("The selected record is no longer available.")
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit dataset record JSON")
+        dialog.setMinimumSize(620, 460)
+        layout = QVBoxLayout(dialog)
+        editor = QTextEdit()
+        editor.setAcceptRichText(False)
+        editor.setPlainText(
+            json.dumps(record["payload"], ensure_ascii=False, indent=2)
+        )
+        layout.addWidget(editor, 1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        try:
+            payload = json.loads(editor.toPlainText())
+        except json.JSONDecodeError as exc:
+            QMessageBox.warning(self, "Invalid JSON", str(exc))
+            return
+        if not is_valid_dataset_payload(record["dataset_type"], payload):
+            QMessageBox.warning(
+                self,
+                "Invalid dataset record",
+                "The JSON must match the selected record format exactly. "
+                "Check the required keys, values, and conversation roles.",
+            )
+            return
+        try:
+            self.record_repository.update_payload(record["id"], payload)
+        except (KeyError, ValueError) as exc:
+            QMessageBox.warning(self, "Record not updated", str(exc))
+            return
+
+        self.verification_reports.pop(record["id"], None)
+        self.verification_errors.pop(record["id"], None)
+        self.quality_reports.pop(record["id"], None)
+        self._refresh_records()
+        for index in range(self.record_list.count()):
+            item = self.record_list.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) == record["id"]:
+                self.record_list.setCurrentItem(item)
+                break
+        self.status.setText(
+            "Record updated and returned to pending review. Recheck its quality "
+            "and source evidence before accepting it."
+        )
+
+    def _set_selected_review(self, status: str) -> None:
+        selected = self.record_list.selectedItems()
+        if not selected:
+            self.status.setText("Select one or more records first.")
+            return
+        count = len(selected)
+        label = {
+            "accepted": "accept",
+            "rejected": "reject",
+            "pending_review": "return to pending review",
+        }[status]
+        answer = QMessageBox.question(
+            self,
+            "Confirm bulk review",
+            f"{label.title()} {count} selected record(s)?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            for item in selected:
+                record_id = item.data(Qt.ItemDataRole.UserRole)
+                self.record_repository.update_review(record_id, status)
+        except (KeyError, ValueError) as exc:
+            self.status.setText(f"Bulk review stopped: {exc}")
+            self._refresh_records()
+            return
+        self._refresh_records()
+        self.status.setText(f"{count} record(s) marked {status}.")
+
+    def _set_review_controls_enabled(self, enabled: bool) -> None:
+        for control in (
+            self.edit_button,
+            self.accept_button,
+            self.reject_button,
+            self.pending_button,
+            self.accept_selected_button,
+            self.reject_selected_button,
+            self.pending_selected_button,
+        ):
+            control.setEnabled(enabled)
 
     def _set_review(self, status: str) -> None:
         if self.active_record_id is None:
@@ -551,9 +687,7 @@ class DatasetBuilderPage(QWidget):
     def _task_finished(self, task_id: str) -> None:
         if task_id == self.TASK_ID:
             self.generate_button.setEnabled(True)
-        elif task_id == self.VERIFICATION_TASK_ID:
+        elif task_id in {self.VERIFICATION_TASK_ID, self.BATCH_VERIFICATION_TASK_ID}:
             self.verify_button.setEnabled(True)
             self.verify_all_button.setEnabled(True)
-        elif task_id == self.BATCH_VERIFICATION_TASK_ID:
-            self.verify_button.setEnabled(True)
-            self.verify_all_button.setEnabled(True)
+            self._set_review_controls_enabled(True)
