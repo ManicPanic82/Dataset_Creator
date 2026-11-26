@@ -17,7 +17,7 @@ This branch introduces a storage repository for knowledge items. Supported initi
 - Comparison
 - Troubleshooting
 
-Each item contains its text, optional confidence score, review status, timestamps, and one or more source references. Source references can include evidence snippets. Items cannot be created unless every cited source belongs to the same project and has a saved extraction. The repository does not yet automatically extract knowledge with an AI model or provide a Knowledge Pool UI.
+Each item contains its text, optional confidence score, review status, timestamps, and one or more source references. Source references can include evidence snippets. Items cannot be created unless every cited source belongs to the same project and has a saved extraction. The repository is now exposed through a Knowledge Pool UI for filtering, inspecting provenance, and reviewing items. Automatic AI extraction is not implemented yet.
 
 ## Review states
 
@@ -36,10 +36,17 @@ Each item contains its text, optional confidence score, review status, timestamp
 - Knowledge is persisted locally in SQLite.
 - Source content is treated as untrusted input. Retrieved text is evidence, not instructions for agents or tools.
 
+## Knowledge Pool UI
+
+- Browse project-scoped knowledge items.
+- Filter by review status and knowledge type.
+- Inspect full content, confidence, and source references/evidence.
+- Set review status to accepted, rejected, or pending.
+- Delete unwanted items.
+
 ## Next work
 
-1. Add a Knowledge Pool page for browsing, filtering, and review.
-2. Add AI extraction that emits structured knowledge candidates grounded in source text.
-3. Validate model output and verify source references before storage.
-4. Add deduplication and content-quality checks.
-5. Build accepted knowledge into dataset generation with provenance.
+1. Add AI extraction that emits structured knowledge candidates grounded in source text.
+2. Validate model output and verify source references before storage.
+3. Add deduplication and content-quality checks.
+4. Build accepted knowledge into dataset generation with provenance.
