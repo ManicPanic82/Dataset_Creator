@@ -18,9 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dataset_forge.services.ai_providers import create_provider
 from dataset_forge.services.dataset_generation import DatasetGenerationService
 from dataset_forge.services.knowledge_context import KnowledgeContextService
-from dataset_forge.services.ai_providers import create_provider
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
 
@@ -48,6 +48,7 @@ class DatasetBuilderPage(QWidget):
         self._build_ui()
         self.task_manager.task_succeeded.connect(self._task_succeeded)
         self.task_manager.task_failed.connect(self._task_failed)
+        self.task_manager.task_progress.connect(self._task_progress)
         self.task_manager.task_finished.connect(self._task_finished)
 
     def _build_ui(self) -> None:
@@ -139,18 +140,20 @@ class DatasetBuilderPage(QWidget):
         items = self.knowledge_repository.list_for_project(
             self.project_id, review_status="accepted"
         )
-        for record in items:
+        for index, record in enumerate(items):
             summary = " ".join(record["content"].split())
             if len(summary) > 125:
                 summary = summary[:122] + "..."
             item = QListWidgetItem(f"{record['kind']} · {summary}")
             item.setData(Qt.ItemDataRole.UserRole, record["id"])
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Checked)
+            item.setCheckState(
+                Qt.CheckState.Checked if index < 20 else Qt.CheckState.Unchecked
+            )
             self.knowledge_list.addItem(item)
         self.status.setText(
             f"{len(items)} accepted knowledge item(s) available. "
-            "Uncheck any items you do not want used."
+            "The first 20 are selected; adjust the selection as needed."
         )
 
     def _select_all_knowledge(self) -> None:
@@ -294,6 +297,10 @@ class DatasetBuilderPage(QWidget):
         self.status.setText(
             f"Generation complete. Saved {saved} record(s) as pending review."
         )
+
+    def _task_progress(self, task_id: str, percent: int, message: str) -> None:
+        if task_id == self.TASK_ID:
+            self.status.setText(f"{percent}% · {message}")
 
     def _task_failed(self, task_id: str, error: str) -> None:
         if task_id == self.TASK_ID:
