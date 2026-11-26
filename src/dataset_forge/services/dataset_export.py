@@ -32,6 +32,29 @@ class DatasetExportService:
         return is_valid_dataset_payload(dataset_type, payload)
 
     @staticmethod
+    def _deduplicate_records(
+        records: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Keep the first occurrence of each exact payload without mutating records."""
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        duplicates = 0
+        for record in records:
+            key = json.dumps(
+                record["payload"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            unique.append(record)
+        return unique, duplicates
+
+    @staticmethod
     def _write_atomic(path: Path, lines: list[str]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path: Path | None = None
@@ -67,6 +90,7 @@ class DatasetExportService:
         test_ratio: float = 0.1,
         seed: int = 42,
         include_provenance: bool = True,
+        deduplicate: bool = False,
     ) -> dict[str, Any]:
         """Write reproducible accepted-record train/validation/test JSONL files."""
         ratios = (train_ratio, validation_ratio, test_ratio)
@@ -98,6 +122,9 @@ class DatasetExportService:
             if record["dataset_type"] == dataset_type
             and not self._valid_payload(dataset_type, record.get("payload"))
         )
+        duplicates = 0
+        if deduplicate:
+            matching, duplicates = self._deduplicate_records(matching)
         # Group records transitively by shared accepted knowledge IDs to reduce leakage.
         parents = {record["id"]: record["id"] for record in matching}
         def find(record_id: str) -> str:
@@ -167,7 +194,8 @@ class DatasetExportService:
         results.update({
             "seed": seed,
             "skipped": skipped,
-            "available": len(matching),
+            "duplicates_removed": duplicates,
+            "available": len(matching) + duplicates,
             "groups": len(group_list),
             "ratios": {"train": train_ratio, "validation": validation_ratio, "test": test_ratio},
         })
@@ -180,6 +208,7 @@ class DatasetExportService:
         output_path: str | Path,
         *,
         include_provenance: bool = True,
+        deduplicate: bool = False,
     ) -> dict[str, Any]:
         if dataset_type not in DATASET_TYPES:
             raise ValueError("Choose a supported dataset format.")
@@ -191,6 +220,19 @@ class DatasetExportService:
             project_id, review_status="accepted"
         )
         matching = [record for record in records if record["dataset_type"] == dataset_type]
+        duplicates = 0
+        if deduplicate:
+            valid_matching = [
+                record for record in matching
+                if self._valid_payload(dataset_type, record.get("payload"))
+            ]
+            unique, duplicates = self._deduplicate_records(valid_matching)
+            unique_ids = {record["id"] for record in unique}
+            matching = [
+                record for record in matching
+                if not self._valid_payload(dataset_type, record.get("payload"))
+                or record["id"] in unique_ids
+            ]
         exported: list[str] = []
         provenance_lines: list[str] = []
         skipped = 0
@@ -223,7 +265,8 @@ class DatasetExportService:
         return {
             "exported": len(exported),
             "skipped": skipped,
-            "available": len(matching),
+            "duplicates_removed": duplicates,
+            "available": len(matching) + duplicates,
             "path": str(destination),
             "provenance_path": str(sidecar_path) if sidecar_path else None,
         }
