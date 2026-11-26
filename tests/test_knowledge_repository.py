@@ -145,3 +145,57 @@ def test_knowledge_item_delete_and_missing_update(prepared_sources):
         repository.update_review(item_id, "accepted")
     with pytest.raises(KeyError):
         repository.delete(item_id)
+
+
+
+def test_duplicate_knowledge_reuses_item_and_preserves_review(prepared_sources):
+    database, project, _, source_ids, _ = prepared_sources
+    repository = KnowledgeRepository(database)
+    first_id = repository.add(
+        project["id"],
+        "procedure",
+        "Search the tracker before reporting.",
+        source_ids[:1],
+        evidence={source_ids[0]: "Search the tracker"},
+        confidence=0.9,
+    )
+    repository.update_review(first_id, "accepted")
+
+    repeated_id = repository.add(
+        project["id"],
+        "procedure",
+        "  SEARCH   THE TRACKER BEFORE REPORTING.  ",
+        source_ids[:1],
+        evidence={source_ids[0]: "Search the tracker"},
+        confidence=0.8,
+    )
+
+    assert repeated_id == first_id
+    items = repository.list_for_project(project["id"])
+    assert len(items) == 1
+    assert items[0]["review_status"] == "accepted"
+
+
+def test_duplicate_knowledge_adds_new_source_provenance(prepared_sources):
+    database, project, _, source_ids, _ = prepared_sources
+    repository = KnowledgeRepository(database)
+    first_id = repository.add(
+        project["id"],
+        "fact",
+        "Python supports reusable functions.",
+        source_ids[:1],
+        evidence={source_ids[0]: "reusable functions"},
+    )
+
+    second_id = repository.add(
+        project["id"],
+        "fact",
+        "Python supports reusable functions.",
+        source_ids[1:],
+        evidence={source_ids[1]: "supports reusable functions"},
+    )
+
+    assert second_id == first_id
+    item = repository.get(first_id)
+    assert len(item["sources"]) == 2
+    assert {source["id"] for source in item["sources"]} == set(source_ids)
