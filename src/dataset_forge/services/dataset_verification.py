@@ -28,7 +28,9 @@ Return exactly one JSON object with:
 - findings: array of at most 12 objects. Each has:
   - severity: "low", "medium", or "high"
   - category: "relevance", "unsupported_claim", "mixed_topics", "clarity", or "completeness"
-  - claim: exact short claim or sentence copied from the answer, preserving wording and punctuation; use an empty string if an exact excerpt cannot be copied
+  - claim: exact short claim or sentence copied from the answer,
+    preserving wording and punctuation; use an empty string if an exact
+    excerpt cannot be copied
   - explanation: concise reason
   - knowledge_id: one supplied knowledge ID that supports or was expected to support the claim
   - evidence: exact verbatim quote from that knowledge item's content
