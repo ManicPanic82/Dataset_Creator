@@ -193,6 +193,7 @@ def test_extraction_still_rejects_changed_evidence_wording():
     assert service.extract_source("project-1", "source-1") == 0
     assert repository.items == []
 
+
 def test_extraction_trims_overlong_verbatim_evidence_from_source_text():
     source_text = "This source contains a deliberately long sentence with enough words "
     source_text += "to exceed the short evidence quotation limit set by the extractor."
