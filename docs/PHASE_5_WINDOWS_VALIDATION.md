@@ -1,6 +1,6 @@
 # Phase 5: Windows Validation
 
-This checkpoint adds a SQLite repository only. No new UI or automatic AI extraction is present yet.
+This checkpoint adds the repository and review UI. Automatic AI extraction is not implemented yet.
 
 ## 1. Update the isolated feature branch
 
@@ -25,10 +25,17 @@ git pull --ff-only origin feature/phase-5-knowledge-pool
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-## 3. Scope of the automated tests
+## 3. UI smoke check
 
-The new tests cover knowledge-item creation, multiple source references, evidence snippets, project isolation, mandatory extraction provenance, review-state filtering, deletion, and invalid inputs.
+1. Launch Dataset Forge AI.
+2. Open the project that contains your extracted source snapshots.
+3. Select **Knowledge Pool** in the navigation.
+4. Confirm the empty-state/status message is visible if no knowledge items have been extracted yet.
+5. Change the review-status and type filters. Confirm the page remains responsive.
+6. Switch to another project and return. Confirm the page is project-scoped.
 
-## 4. Current limitation
+The list will remain empty until the AI extraction workflow or knowledge items are added. This UI checkpoint provides review/filter controls, but no AI extraction button yet.
 
-The repository API is not yet exposed through a Knowledge Pool UI and does not call AI models. Those are follow-on tasks once this storage checkpoint is validated locally.
+## 4. Scope of automated tests
+
+Tests cover repository creation, multiple source references, evidence snippets, project isolation, mandatory extraction provenance, review-state filtering, deletion, and invalid inputs.
