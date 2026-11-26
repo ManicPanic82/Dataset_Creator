@@ -5,7 +5,7 @@ import json
 import pytest
 
 from dataset_forge.services.crawler import ExtractedPage
-from dataset_forge.services.dataset_export import DatasetExportService, SPLIT_PROFILES
+from dataset_forge.services.dataset_export import SPLIT_PROFILES, DatasetExportService
 from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
