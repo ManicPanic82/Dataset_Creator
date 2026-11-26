@@ -610,6 +610,7 @@ class MainWindow(QMainWindow):
             return
         message = (
             f"Exported {result['exported']} accepted record(s). "
+            f"Removed {result['duplicates_removed']} exact duplicate(s). "
             f"Skipped {result['skipped']} invalid record(s)."
         )
         if result["provenance_path"]:
