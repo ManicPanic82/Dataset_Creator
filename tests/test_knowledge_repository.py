@@ -252,7 +252,7 @@ def test_generation_context_includes_only_accepted_knowledge_and_provenance(
 def test_generation_context_rejects_unaccepted_or_cross_project_selection(
     prepared_sources,
 ):
-    database, project, _, source_ids, _ = prepared_sources
+    database, project, other_project, source_ids, other_source_id = prepared_sources
     repository = KnowledgeRepository(database)
     pending_id = repository.add(
         project["id"], "fact", "Pending material", source_ids[:1]
@@ -262,17 +262,8 @@ def test_generation_context_rejects_unaccepted_or_cross_project_selection(
             project["id"], [pending_id]
         )
 
-    other_project = ProjectRepository(database).create("Separate project")
-    other_research = ResearchRepository(database)
-    other_research.add_sources(
-        other_project["id"],
-        [SourceCandidate(url="https://other-project.org/", domain="other-project.org")],
-    )
     other_id = repository.add(
-        other_project["id"],
-        "fact",
-        "Other project material",
-        [other_research.list_sources(other_project["id"])[0]["id"]],
+        other_project["id"], "fact", "Other project material", [other_source_id]
     )
     repository.update_review(other_id, "accepted")
     with pytest.raises(ValueError, match="must be accepted"):
