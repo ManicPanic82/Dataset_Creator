@@ -111,7 +111,7 @@ class KnowledgeExtractionService:
                     len(source_text),
                 )
                 continue
-            evidence_words = list(re.finditer(r"\\S+", matched_evidence))
+            evidence_words = list(re.finditer(r"\S+", matched_evidence))
             if len(evidence_words) > MAX_EVIDENCE_WORDS:
                 matched_evidence = matched_evidence[:evidence_words[MAX_EVIDENCE_WORDS - 1].end()]
                 LOGGER.info(
