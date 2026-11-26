@@ -203,7 +203,7 @@ def test_verification_rejects_malformed_unhashable_verdict():
 
 
 
-def test_verification_rejects_claim_not_present_in_answer():
+def test_verification_omits_claim_that_is_not_an_exact_answer_excerpt():
     finding = _report()["findings"][0] | {
         "claim": "The source says something else entirely."
     }
@@ -211,15 +211,19 @@ def test_verification_rejects_claim_not_present_in_answer():
         StubProvider(_report(findings=[finding])), "model"
     )
 
-    with pytest.raises(ValueError, match="exact excerpt from the answer"):
-        service.verify(
-            "question_answer",
-            {
-                "question": "What must nested exceptions be?",
-                "answer": "They must be exception instances, not exception types.",
-            },
-            KNOWLEDGE,
-        )
+    result = service.verify(
+        "question_answer",
+        {
+            "question": "What must nested exceptions be?",
+            "answer": "They must be exception instances, not exception types.",
+        },
+        KNOWLEDGE,
+    )
+
+    clean_finding = result["findings"][0]
+    assert clean_finding["claim"] == ""
+    assert "exact excerpt" in clean_finding["explanation"]
+    assert clean_finding["evidence"] == _report()["findings"][0]["evidence"]
 
 
 def test_batch_verification_continues_after_an_individual_provider_failure():
