@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from dataset_forge.services.crawler import ExtractedPage
 from dataset_forge.services.dataset_export import DatasetExportService
 from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
@@ -12,7 +13,6 @@ from dataset_forge.storage.knowledge_repository import KnowledgeRepository
 from dataset_forge.storage.repositories import ProjectRepository
 from dataset_forge.storage.research_repository import ResearchRepository
 from dataset_forge.storage.source_content_repository import SourceContentRepository
-from dataset_forge.services.crawler import ExtractedPage
 
 
 @pytest.fixture
@@ -122,7 +122,7 @@ def test_export_can_omit_provenance_and_creates_empty_jsonl(export_setup, tmp_pa
 @pytest.mark.parametrize("path", ["dataset.csv", "dataset"])
 def test_export_requires_jsonl_extension(export_setup, tmp_path, path):
     project, _, records = export_setup
-    with pytest.raises(ValueError, match="\.jsonl"):
+    with pytest.raises(ValueError, match=r"\.jsonl"):
         DatasetExportService(records).export_project(
             project["id"], "question_answer", tmp_path / path
         )
@@ -134,3 +134,24 @@ def test_export_rejects_unknown_dataset_type(export_setup, tmp_path):
         DatasetExportService(records).export_project(
             project["id"], "csv", tmp_path / "dataset.jsonl"
         )
+
+
+def test_export_skips_invalid_accepted_payload_and_reports_count(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    _add_record(
+        records,
+        project["id"],
+        knowledge_id,
+        {"question": "Missing answer?", "answer": ""},
+        "accepted",
+    )
+    destination = tmp_path / "screened.jsonl"
+
+    result = DatasetExportService(records).export_project(
+        project["id"], "question_answer", destination, include_provenance=False
+    )
+
+    assert result["available"] == 1
+    assert result["exported"] == 0
+    assert result["skipped"] == 1
+    assert destination.read_text(encoding="utf-8") == ""
