@@ -197,4 +197,28 @@ class DatasetVerificationService:
                 if isinstance(message, dict) and message.get("role") == "assistant"
                 and isinstance(message.get("content"), str)
             )
+
         return self._validate_response(response, provenance, answer_text)
+
+    def verify_batch(
+        self,
+        records: list[dict[str, Any]],
+        progress_callback=None,
+    ) -> dict[str, Any]:
+        """Verify every record independently, continuing after individual failures."""
+        reports: dict[str, dict[str, Any]] = {}
+        errors: dict[str, str] = {}
+        total = len(records)
+        for index, record in enumerate(records, start=1):
+            record_id = record.get("id")
+            if not isinstance(record_id, str) or not record_id:
+                record_id = f"record-{index}"
+            try:
+                reports[record_id] = self.verify(
+                    record["dataset_type"], record["payload"], record["provenance"]
+                )
+            except Exception as exc:
+                errors[record_id] = f"{type(exc).__name__}: {exc}"
+            if progress_callback is not None:
+                progress_callback(index, total, record_id)
+        return {"reports": reports, "errors": errors, "total": total}
