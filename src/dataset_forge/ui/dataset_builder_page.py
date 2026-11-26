@@ -395,7 +395,7 @@ class DatasetBuilderPage(QWidget):
         )
 
     def _task_progress(self, task_id: str, percent: int, message: str) -> None:
-        if task_id == self.TASK_ID:
+        if task_id in {self.TASK_ID, self.VERIFICATION_TASK_ID}:
             self.status.setText(f"{percent}% · {message}")
 
     def _task_failed(self, task_id: str, error: str) -> None:
