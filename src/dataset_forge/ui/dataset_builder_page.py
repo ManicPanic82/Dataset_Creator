@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from dataset_forge.services.ai_providers import create_provider
 from dataset_forge.services.dataset_generation import DatasetGenerationService
+from dataset_forge.services.dataset_quality import DatasetQualityService
 from dataset_forge.services.knowledge_context import KnowledgeContextService
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
@@ -101,6 +102,10 @@ class DatasetBuilderPage(QWidget):
         self.record_list = QListWidget()
         self.record_list.currentItemChanged.connect(self._show_record)
         records_layout.addWidget(self.record_list, 1)
+        self.quality_summary = QLabel("Quality screening appears when you select a record.")
+        self.quality_summary.setWordWrap(True)
+        self.quality_summary.setObjectName("muted")
+        records_layout.addWidget(self.quality_summary)
         self.record_details = QTextEdit()
         self.record_details.setReadOnly(True)
         self.record_details.setPlaceholderText(
@@ -220,6 +225,7 @@ class DatasetBuilderPage(QWidget):
     def _refresh_records(self) -> None:
         self.record_list.clear()
         self.record_details.clear()
+        self.quality_summary.setText("Quality screening appears when you select a record.")
         self.active_record_id = None
         if self.project_id is None:
             return
@@ -247,6 +253,7 @@ class DatasetBuilderPage(QWidget):
         if current is None:
             self.active_record_id = None
             self.record_details.clear()
+            self.quality_summary.setText("Select a record to run quality screening.")
             return
         record_id = current.data(Qt.ItemDataRole.UserRole)
         record = self.record_repository.get(record_id)
@@ -254,6 +261,17 @@ class DatasetBuilderPage(QWidget):
             self.record_details.clear()
             return
         self.active_record_id = record_id
+        quality = DatasetQualityService.assess(
+            record["dataset_type"], record["payload"], record["provenance"]
+        )
+        quality_lines = [
+            f"Quality screening: {quality['score']}/100 · {quality['label']}"
+        ]
+        quality_lines.extend(
+            f"- {flag['message']}" for flag in quality["flags"]
+        )
+        quality_lines.append(quality["disclaimer"])
+        self.quality_summary.setText("\n".join(quality_lines))
         lines = [
             f"Format: {record['dataset_type']}",
             f"Review: {record['review_status']}",
