@@ -306,3 +306,72 @@ def test_split_export_deduplicates_before_leakage_grouping(export_setup, tmp_pat
     assert result["duplicates_removed"] == 1
     assert exported_count == 2
     assert result["groups"] == 1
+
+
+
+def test_export_writes_manifest_with_settings_counts_and_file_names(
+    export_setup, tmp_path
+):
+    project, knowledge_id, records = export_setup
+    _add_record(
+        records, project["id"], knowledge_id,
+        {"question": "Manifest?", "answer": "Audit trail."}, "accepted"
+    )
+    destination = tmp_path / "manifested.jsonl"
+
+    result = DatasetExportService(records).export_project(
+        project["id"], "question_answer", destination,
+        include_provenance=False, deduplicate=True,
+    )
+
+    manifest_path = tmp_path / "manifested.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result["manifest_path"] == str(manifest_path)
+    assert manifest["manifest_version"] == 1
+    assert manifest["project_id"] == project["id"]
+    assert manifest["dataset_type"] == "question_answer"
+    assert manifest["export_mode"] == "single_file"
+    assert manifest["available_accepted_records"] == 1
+    assert manifest["exported_records"] == 1
+    assert manifest["skipped_invalid_records"] == 0
+    assert manifest["duplicates_removed"] == 0
+    assert manifest["deduplicate_exact"] is True
+    assert manifest["include_provenance"] is False
+    assert manifest["dataset_file"] == "manifested.jsonl"
+    assert manifest["provenance_file"] is None
+    assert manifest["created_at_utc"].endswith("+00:00")
+
+
+def test_split_export_writes_manifest_with_ratios_seed_and_counts(
+    export_setup, tmp_path
+):
+    project, knowledge_id, records = export_setup
+    for index in range(3):
+        _add_record(
+            records, project["id"], knowledge_id,
+            {"question": f"Manifest question {index}", "answer": f"Answer {index}"},
+            "accepted",
+        )
+
+    result = DatasetExportService(records).export_splits(
+        project["id"], "question_answer", tmp_path,
+        train_ratio=0.7, validation_ratio=0.2, test_ratio=0.1,
+        seed=123, include_provenance=True, deduplicate=True,
+    )
+
+    manifest_path = tmp_path / "export.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert result["manifest_path"] == str(manifest_path)
+    assert manifest["export_mode"] == "train_validation_test"
+    assert manifest["available_accepted_records"] == 3
+    assert manifest["exported_records"] == 3
+    assert manifest["seed"] == 123
+    assert manifest["ratios"] == {
+        "train": 0.7, "validation": 0.2, "test": 0.1
+    }
+    assert manifest["leakage_groups"] == 1
+    assert sum(split["count"] for split in manifest["splits"].values()) == 3
+    assert all(
+        split["provenance_file"] is not None
+        for split in manifest["splits"].values()
+    )
