@@ -49,6 +49,7 @@ class DatasetBuilderPage(QWidget):
         self.project_id: str | None = None
         self.active_record_id: str | None = None
         self.verification_reports: dict[str, dict] = {}
+        self.verification_errors: dict[str, str] = {}
         self._build_ui()
         self.task_manager.task_succeeded.connect(self._task_succeeded)
         self.task_manager.task_failed.connect(self._task_failed)
