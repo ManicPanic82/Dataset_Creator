@@ -575,6 +575,7 @@ class MainWindow(QMainWindow):
             f"Test {result['test']['count']}. "
             f"Removed {result['duplicates_removed']} exact duplicate(s). "
             f"Skipped {result['skipped']} invalid record(s)."
+            f"\nManifest: {result['manifest_path']}"
         )
         self.export_status.setText(message)
         QMessageBox.information(self, "Split export complete", message)
@@ -615,6 +616,7 @@ class MainWindow(QMainWindow):
         )
         if result["provenance_path"]:
             message += f"\nProvenance: {result['provenance_path']}"
+        message += f"\nManifest: {result['manifest_path']}"
         self.export_status.setText(f"{message}\nDataset: {result['path']}")
         QMessageBox.information(self, "Dataset export complete", message)
 
