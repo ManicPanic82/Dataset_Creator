@@ -29,9 +29,11 @@ from dataset_forge.services.ai_providers import (
     create_provider,
 )
 from dataset_forge.services.task_manager import TaskManager
+from dataset_forge.storage.knowledge_repository import KnowledgeRepository
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 from dataset_forge.storage.research_repository import ResearchRepository
 from dataset_forge.storage.source_content_repository import SourceContentRepository
+from dataset_forge.ui.knowledge_pool_page import KnowledgePoolPage
 from dataset_forge.ui.research_page import ResearchPage
 from dataset_forge.ui.sources_page import SourcesPage
 
@@ -68,6 +70,7 @@ class MainWindow(QMainWindow):
         ("Overview", "Your research-to-dataset workspace."),
         ("Research", "Plan research, approve scope, and manage candidate sources."),
         ("Sources", "Fetch approved public sources and inspect extracted content."),
+        ("Knowledge Pool", "Review structured knowledge and its source provenance."),
         ("Dataset Builder", "Dataset schemas and generation controls will arrive in Phase 6."),
         ("Generation", "Resumable generation workflows will arrive in Phase 6."),
         ("Quality Control", "Validation and review tools will arrive in Phase 7."),
@@ -96,6 +99,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.research_repository = ResearchRepository(projects.database)
         self.source_content_repository = SourceContentRepository(projects.database)
+        self.knowledge_repository = KnowledgeRepository(projects.database)
         self.task_manager = TaskManager(self)
         self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
         self.task_manager.task_failed.connect(self._provider_task_failed)
@@ -190,6 +194,9 @@ class MainWindow(QMainWindow):
                     self.task_manager,
                 )
                 page_layout.addWidget(self.sources_page)
+            elif title == "Knowledge Pool":
+                self.knowledge_page = KnowledgePoolPage(self.knowledge_repository)
+                page_layout.addWidget(self.knowledge_page)
             elif title == "Settings":
                 self._build_settings_page(page_layout)
             else:
@@ -372,6 +379,8 @@ class MainWindow(QMainWindow):
             # Research can add or approve candidates while Sources is hidden.
             # Refresh on entry so the user never has to restart the application.
             self.sources_page.set_project(self.current_project_id)
+        if index == 3 and self.current_project_id is not None:
+            self.knowledge_page.set_project(self.current_project_id)
         title, description = self.SECTIONS[index]
         self.section_title.setText(title)
         self.section_description.setText(description)
@@ -386,6 +395,7 @@ class MainWindow(QMainWindow):
                 self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
                 self.research_page.set_project(project_id)
                 self.sources_page.set_project(project_id)
+                self.knowledge_page.set_project(project_id)
 
     def closeEvent(self, event) -> None:
         self.task_manager.shutdown()
@@ -445,6 +455,7 @@ class MainWindow(QMainWindow):
         self.project_label.setText(f"OPEN PROJECT\n{project['name']}")
         self.research_page.set_project(project_id)
         self.sources_page.set_project(project_id)
+        self.knowledge_page.set_project(project_id)
         self.settings.set("last_project_id", project_id)
         self.navigation.setCurrentRow(0)
         LOGGER.info("Opened project %s", project_id)
