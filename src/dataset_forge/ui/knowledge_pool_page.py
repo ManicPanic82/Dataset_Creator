@@ -7,24 +7,37 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
+    QInputDialog,
     QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from dataset_forge.services.knowledge_extraction import KnowledgeExtractionService
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
+from dataset_forge.storage.source_content_repository import SourceContentRepository
 
 
 class KnowledgePoolPage(QWidget):
     """Review project-scoped knowledge and inspect its source provenance."""
 
-    def __init__(self, repository: KnowledgeRepository, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, repository: KnowledgeRepository, source_content: SourceContentRepository,
+        task_manager, provider_config, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.repository = repository
+        self.source_content = source_content
+        self.task_manager = task_manager
+        self.provider_config = provider_config
         self.project_id: str | None = None
         self.active_item_id: str | None = None
         self._build_ui()
+        self.task_manager.task_succeeded.connect(self._task_succeeded)
+        self.task_manager.task_failed.connect(self._task_failed)
+        self.task_manager.task_progress.connect(self._task_progress)
+        self.task_manager.task_finished.connect(self._task_finished)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -45,6 +58,9 @@ class KnowledgePoolPage(QWidget):
             self.kind_filter.addItem(kind.title(), kind)
         self.kind_filter.currentIndexChanged.connect(self._refresh)
         filters.addWidget(self.kind_filter)
+        self.extract_button = QPushButton("Extract knowledge from source...")
+        self.extract_button.clicked.connect(self._extract_from_source)
+        filters.addWidget(self.extract_button)
         refresh_button = QPushButton("Refresh")
         refresh_button.clicked.connect(self._refresh)
         filters.addWidget(refresh_button)
@@ -114,6 +130,71 @@ class KnowledgePoolPage(QWidget):
                 Qt.ItemDataRole.UserRole, record["id"]
             )
         self.status.setText(f"{len(records)} knowledge item(s) in this project.")
+
+    def _extract_from_source(self) -> None:
+        if self.project_id is None:
+            self.status.setText("Open a project before extracting knowledge.")
+            return
+        sources = self.repository.list_extracted_sources(self.project_id)
+        if not sources:
+            self.status.setText("Fetch and extract at least one source first.")
+            return
+        labels = [
+            f"{source['title'] or source['url']}  |  {source['url']}"
+            for source in sources
+        ]
+        selected, accepted = QInputDialog.getItem(
+            self, "Extract knowledge", "Choose an extracted source:", labels, 0, False
+        )
+        if not accepted or not selected:
+            return
+        source = sources[labels.index(selected)]
+        try:
+            config, model = self.provider_config()
+            from dataset_forge.services.ai_providers import create_provider
+            provider = create_provider(config)
+        except (ValueError, TypeError) as exc:
+            self.status.setText(f"Configure an AI provider and model in Settings: {exc}")
+            return
+        project_id = self.project_id
+        source_id = source["id"]
+        service = KnowledgeExtractionService(
+            provider, model, self.repository, self.source_content
+        )
+
+        def extract(context):
+            return service.extract_source(
+                project_id, source_id,
+                progress=context.report_progress,
+                cancelled=lambda: context.cancelled,
+            )
+
+        try:
+            self.task_manager.submit("knowledge_extract", extract)
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        self.extract_button.setEnabled(False)
+        self.status.setText(f"Extracting knowledge from {source['url']}...")
+
+    def _task_progress(self, task_id: str, percent: int, message: str) -> None:
+        if task_id == "knowledge_extract":
+            self.status.setText(f"{percent}% · {message}")
+
+    def _task_succeeded(self, task_id: str, result: object) -> None:
+        if task_id == "knowledge_extract":
+            self._refresh()
+            self.status.setText(
+                f"Extraction complete. Saved {result} pending knowledge item(s)."
+            )
+
+    def _task_failed(self, task_id: str, error: str) -> None:
+        if task_id == "knowledge_extract":
+            self.status.setText(f"Knowledge extraction failed: {error}")
+
+    def _task_finished(self, task_id: str) -> None:
+        if task_id == "knowledge_extract":
+            self.extract_button.setEnabled(True)
 
     def _show_item(self, current, _previous) -> None:
         if current is None:
