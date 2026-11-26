@@ -122,6 +122,20 @@ def test_url_import_allows_any_public_domain_by_default() -> None:
     assert "Local" in rejected[0][1]
 
 
+def test_domain_filter_normalizes_documentation_paths_to_hostnames() -> None:
+    assert ResearchPlan.from_dict(
+        {
+            "objective": "Research Python",
+            "scope": "Documentation",
+            "preferred_domains": ["w3schools.com/python"],
+            "excluded_domains": ["https://example.com/legacy/python"],
+        }
+    ).preferred_domains == ("w3schools.com",)
+    assert DomainFilter.create(include=["https://docs.python.org/3/"]).include == (
+        "docs.python.org",
+    )
+
+
 def test_research_plan_rejects_unsafe_domain_filters() -> None:
     with pytest.raises(ValueError, match="Local and private"):
         ResearchPlan.from_dict(
