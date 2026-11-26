@@ -49,6 +49,18 @@ class DatasetRecordRepository:
 
                 CREATE INDEX IF NOT EXISTS idx_dataset_record_knowledge_item
                     ON dataset_record_knowledge(knowledge_id);
+
+                CREATE TABLE IF NOT EXISTS dataset_record_sources (
+                    record_id TEXT NOT NULL REFERENCES dataset_records(id)
+                        ON DELETE CASCADE,
+                    knowledge_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    domain TEXT NOT NULL,
+                    evidence TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (record_id, knowledge_id, source_id)
+                );
                 """
             )
 
@@ -76,6 +88,22 @@ class DatasetRecordRepository:
                     raise ValueError("Record knowledge must belong to the selected project.")
                 if row["review_status"] != "accepted":
                     raise ValueError("Record provenance must reference accepted knowledge.")
+                source_rows = connection.execute(
+                    """SELECT s.id, s.url, s.title, s.domain, kis.evidence
+                       FROM knowledge_item_sources kis
+                       JOIN source_candidates s ON s.id = kis.source_id
+                       WHERE kis.knowledge_id = ?""",
+                    (knowledge_id,),
+                ).fetchall()
+                if not source_rows:
+                    raise ValueError("Record provenance requires at least one linked source.")
+                if knowledge_id == knowledge_ids[0]:
+                    provenance_rows = []
+                provenance_rows.extend(
+                    (knowledge_id, source["id"], source["url"], source["title"],
+                     source["domain"], source["evidence"])
+                    for source in source_rows
+                )
             connection.execute(
                 """INSERT INTO dataset_records
                    (id, project_id, dataset_type, payload_json, review_status,
@@ -89,6 +117,15 @@ class DatasetRecordRepository:
                    VALUES (?, ?)""",
                 [(record_id, knowledge_id) for knowledge_id in knowledge_ids],
             )
+            connection.executemany(
+                """INSERT INTO dataset_record_sources
+                   (record_id, knowledge_id, source_id, url, title, domain, evidence)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (record_id, *source_row)
+                    for source_row in provenance_rows
+                ],
+            )
         return record_id
 
     def get(self, record_id: str) -> dict[str, Any] | None:
@@ -100,13 +137,15 @@ class DatasetRecordRepository:
                 return None
             knowledge = connection.execute(
                 """SELECT k.id, k.kind, k.content, k.confidence,
-                          s.id AS source_id, s.url AS source_url, s.title AS source_title,
-                          s.domain AS source_domain, kis.evidence
+                          drs.source_id, drs.url AS source_url,
+                          drs.title AS source_title, drs.domain AS source_domain,
+                          drs.evidence
                    FROM dataset_record_knowledge drk
                    JOIN knowledge_items k ON k.id = drk.knowledge_id
-                   LEFT JOIN knowledge_item_sources kis ON kis.knowledge_id = k.id
-                   LEFT JOIN source_candidates s ON s.id = kis.source_id
-                   WHERE drk.record_id = ? ORDER BY k.id, s.url""",
+                   JOIN dataset_record_sources drs
+                     ON drs.record_id = drk.record_id
+                    AND drs.knowledge_id = drk.knowledge_id
+                   WHERE drk.record_id = ? ORDER BY k.id, drs.url""",
                 (record_id,),
             ).fetchall()
         result = dict(row)
