@@ -558,8 +558,12 @@ class MainWindow(QMainWindow):
             self.export_status.setText(f"Split export failed: {exc}")
             QMessageBox.warning(self, "Split export failed", str(exc))
             return
+        ratios = result["ratios"]
         message = (
-            f"Split export complete. Seed {result['seed']}. "
+            f"Split export complete. Seed {result['seed']}; "
+            f"{result['groups']} leakage-safe group(s). "
+            f"Targets: {ratios['train']:.0%} / "
+            f"{ratios['validation']:.0%} / {ratios['test']:.0%}. "
             f"Train {result['train']['count']} · "
             f"Validation {result['validation']['count']} · "
             f"Test {result['test']['count']}. "
