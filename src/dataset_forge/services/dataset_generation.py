@@ -139,6 +139,10 @@ class DatasetGenerationService:
         items = context["knowledge_items"]
         if not items:
             raise ValueError("Accept at least one knowledge item before generating records.")
+        if any(not item["sources"] for item in items):
+            raise ValueError(
+                "Every selected knowledge item must retain at least one source reference."
+            )
         if len(items) > MAX_KNOWLEDGE_CONTEXT_ITEMS:
             raise ValueError(
                 f"Select no more than {MAX_KNOWLEDGE_CONTEXT_ITEMS} accepted knowledge items "
