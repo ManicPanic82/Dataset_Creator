@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime, timezone
 import os
 import tempfile
 from pathlib import Path
@@ -83,6 +84,14 @@ class DatasetExportService:
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
+
+    @staticmethod
+    def _write_manifest(path: Path, manifest: dict[str, Any]) -> str:
+        """Write a UTF-8 JSON audit manifest beside the exported dataset."""
+        DatasetExportService._write_atomic(
+            path, [json.dumps(manifest, ensure_ascii=False, indent=2)]
+        )
+        return str(path)
 
     def export_splits(
         self,
@@ -204,6 +213,36 @@ class DatasetExportService:
             "groups": len(group_list),
             "ratios": {"train": train_ratio, "validation": validation_ratio, "test": test_ratio},
         })
+        manifest_path = directory / "export.manifest.json"
+        manifest = {
+            "manifest_version": 1,
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "project_id": project_id,
+            "dataset_type": dataset_type,
+            "export_mode": "train_validation_test",
+            "available_accepted_records": len(matching) + duplicates,
+            "exported_records": sum(partition["count"] for partition in results.values()
+                                    if isinstance(partition, dict) and "count" in partition),
+            "skipped_invalid_records": skipped,
+            "duplicates_removed": duplicates,
+            "deduplicate_exact": deduplicate,
+            "include_provenance": include_provenance,
+            "seed": seed,
+            "ratios": results["ratios"],
+            "leakage_groups": len(group_list),
+            "splits": {
+                name: {
+                    "count": results[name]["count"],
+                    "dataset_file": Path(results[name]["path"]).name,
+                    "provenance_file": (
+                        Path(results[name]["provenance_path"]).name
+                        if results[name]["provenance_path"] else None
+                    ),
+                }
+                for name in ("train", "validation", "test")
+            },
+        }
+        results["manifest_path"] = self._write_manifest(manifest_path, manifest)
         return results
 
     def export_project(
@@ -267,7 +306,7 @@ class DatasetExportService:
             )
             self._write_atomic(sidecar_path, provenance_lines)
 
-        return {
+        result = {
             "exported": len(exported),
             "skipped": skipped,
             "duplicates_removed": duplicates,
@@ -275,3 +314,21 @@ class DatasetExportService:
             "path": str(destination),
             "provenance_path": str(sidecar_path) if sidecar_path else None,
         }
+        manifest_path = destination.with_name(f"{destination.stem}.manifest.json")
+        manifest = {
+            "manifest_version": 1,
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "project_id": project_id,
+            "dataset_type": dataset_type,
+            "export_mode": "single_file",
+            "available_accepted_records": result["available"],
+            "exported_records": result["exported"],
+            "skipped_invalid_records": skipped,
+            "duplicates_removed": duplicates,
+            "deduplicate_exact": deduplicate,
+            "include_provenance": include_provenance,
+            "dataset_file": destination.name,
+            "provenance_file": sidecar_path.name if sidecar_path else None,
+        }
+        result["manifest_path"] = self._write_manifest(manifest_path, manifest)
+        return result
