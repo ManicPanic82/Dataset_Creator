@@ -48,9 +48,23 @@ class DatasetIntegrityService:
                 not isinstance(filename, str)
                 or not filename
                 or Path(filename).name != filename
+                or "/" in filename
+                or "\\" in filename
                 or not isinstance(expected, dict)
             ):
                 errors.append(f"Invalid file entry: {filename!r}")
+                continue
+            expected_hash = expected.get("sha256")
+            expected_records = expected.get("records")
+            if (
+                not isinstance(expected_hash, str)
+                or len(expected_hash) != 64
+                or any(character not in "0123456789abcdef" for character in expected_hash)
+                or isinstance(expected_records, bool)
+                or not isinstance(expected_records, int)
+                or expected_records < 0
+            ):
+                errors.append(f"{filename}: invalid integrity metadata.")
                 continue
             target = manifest_file.parent / filename
             try:
@@ -65,7 +79,7 @@ class DatasetIntegrityService:
 
             checked_files += 1
             actual_hash = hashlib.sha256(raw).hexdigest()
-            if actual_hash != expected.get("sha256"):
+            if actual_hash != expected_hash:
                 errors.append(f"{filename}: SHA-256 mismatch.")
             try:
                 text = raw.decode("utf-8")
@@ -79,9 +93,9 @@ class DatasetIntegrityService:
                 continue
 
             actual_count = len(rows)
-            if actual_count != expected.get("records"):
+            if actual_count != expected_records:
                 errors.append(
-                    f"{filename}: expected {expected.get('records')} record(s), "
+                    f"{filename}: expected {expected_records} record(s), "
                     f"found {actual_count}."
                 )
             total_records += actual_count
@@ -93,9 +107,12 @@ class DatasetIntegrityService:
             entry for name, entry in files.items()
             if isinstance(entry, dict) and not name.endswith(".provenance.jsonl")
         ]
-        if isinstance(expected_total, int) and sum(
-            entry.get("records", -1) for entry in dataset_entries
-        ) != expected_total:
+        if (
+            isinstance(expected_total, int)
+            and not isinstance(expected_total, bool)
+            and all(isinstance(entry.get("records"), int) for entry in dataset_entries)
+            and sum(entry["records"] for entry in dataset_entries) != expected_total
+        ):
             errors.append("Manifest dataset file counts do not match exported_records.")
 
         return {
