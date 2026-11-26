@@ -71,6 +71,7 @@ def test_ollama_structured_generation(monkeypatch) -> None:
         assert url.endswith("/api/chat")
         assert json["model"] == "qwen2.5"
         assert json["format"] == "json"
+        assert json["think"] is False
         assert json["options"] == {"num_predict": 2048}
         assert timeout == 600.0
         return httpx.Response(
