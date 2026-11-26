@@ -29,10 +29,12 @@ from dataset_forge.services.ai_providers import (
     create_provider,
 )
 from dataset_forge.services.task_manager import TaskManager
+from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
 from dataset_forge.storage.repositories import ProjectRepository, SettingsRepository
 from dataset_forge.storage.research_repository import ResearchRepository
 from dataset_forge.storage.source_content_repository import SourceContentRepository
+from dataset_forge.ui.dataset_builder_page import DatasetBuilderPage
 from dataset_forge.ui.knowledge_pool_page import KnowledgePoolPage
 from dataset_forge.ui.research_page import ResearchPage
 from dataset_forge.ui.sources_page import SourcesPage
@@ -71,7 +73,7 @@ class MainWindow(QMainWindow):
         ("Research", "Plan research, approve scope, and manage candidate sources."),
         ("Sources", "Fetch approved public sources and inspect extracted content."),
         ("Knowledge Pool", "Review structured knowledge and its source provenance."),
-        ("Dataset Builder", "Dataset schemas and generation controls will arrive in Phase 6."),
+        ("Dataset Builder", "Generate, inspect, and review source-grounded dataset records."),
         ("Generation", "Resumable generation workflows will arrive in Phase 6."),
         ("Quality Control", "Validation and review tools will arrive in Phase 7."),
         ("Projects & Export", "Manage projects now. Dataset export arrives in Phase 8."),
@@ -100,6 +102,7 @@ class MainWindow(QMainWindow):
         self.research_repository = ResearchRepository(projects.database)
         self.source_content_repository = SourceContentRepository(projects.database)
         self.knowledge_repository = KnowledgeRepository(projects.database)
+        self.dataset_record_repository = DatasetRecordRepository(projects.database)
         self.task_manager = TaskManager(self)
         self.task_manager.task_succeeded.connect(self._provider_task_succeeded)
         self.task_manager.task_failed.connect(self._provider_task_failed)
@@ -202,6 +205,14 @@ class MainWindow(QMainWindow):
                     self._research_provider_config,
                 )
                 page_layout.addWidget(self.knowledge_page)
+            elif title == "Dataset Builder":
+                self.dataset_builder_page = DatasetBuilderPage(
+                    self.knowledge_repository,
+                    self.dataset_record_repository,
+                    self.task_manager,
+                    self._research_provider_config,
+                )
+                page_layout.addWidget(self.dataset_builder_page)
             elif title == "Settings":
                 self._build_settings_page(page_layout)
             else:
@@ -386,6 +397,8 @@ class MainWindow(QMainWindow):
             self.sources_page.set_project(self.current_project_id)
         if index == 3 and self.current_project_id is not None:
             self.knowledge_page.set_project(self.current_project_id)
+        if index == 4 and self.current_project_id is not None:
+            self.dataset_builder_page.set_project(self.current_project_id)
         title, description = self.SECTIONS[index]
         self.section_title.setText(title)
         self.section_description.setText(description)
@@ -401,6 +414,8 @@ class MainWindow(QMainWindow):
                 self.research_page.set_project(project_id)
                 self.sources_page.set_project(project_id)
                 self.knowledge_page.set_project(project_id)
+        self.dataset_builder_page.set_project(project_id)
+                self.dataset_builder_page.set_project(project_id)
 
     def closeEvent(self, event) -> None:
         self.task_manager.shutdown()
