@@ -155,3 +155,48 @@ def test_generation_enforces_batch_and_dataset_type_limits(generation_setup):
         service.generate_batch(project["id"], dataset_type="question_answer", count=21)
     with pytest.raises(ValueError, match="Unsupported dataset type"):
         service.generate_batch(project["id"], dataset_type="csv", count=1)
+
+
+@pytest.mark.parametrize(
+    ("dataset_type", "data"),
+    [
+        (
+            "instruction",
+            {
+                "instruction": "Explain a function.",
+                "input": "",
+                "output": "A function is reusable code.",
+            },
+        ),
+        (
+            "conversational",
+            {
+                "messages": [
+                    {"role": "user", "content": "What is a function?"},
+                    {"role": "assistant", "content": "A reusable block of code."},
+                ]
+            },
+        ),
+    ],
+)
+def test_generation_supports_instruction_and_conversation_shapes(
+    generation_setup, dataset_type, data
+):
+    project, knowledge_id, _, _, records, context = generation_setup
+    provider = StubProvider(
+        {
+            "records": [
+                {"data": data, "knowledge_ids": [knowledge_id]},
+            ]
+        }
+    )
+    service = DatasetGenerationService(provider, "test-model", context, records)
+
+    generated = service.generate_batch(
+        project["id"], dataset_type=dataset_type, count=1
+    )
+
+    assert len(generated) == 1
+    assert generated[0]["dataset_type"] == dataset_type
+    assert generated[0]["payload"] == data
+    assert generated[0]["review_status"] == "pending_review"
