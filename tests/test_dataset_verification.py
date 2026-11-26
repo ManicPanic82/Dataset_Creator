@@ -108,7 +108,14 @@ def test_verification_rejects_unknown_knowledge_reference():
     )
 
     with pytest.raises(ValueError, match="unknown knowledge"):
-        service.verify("instruction", {"instruction": "Q", "output": "A"}, KNOWLEDGE)
+        service.verify(
+            "instruction",
+            {
+                "instruction": "Q",
+                "output": "They must be exception instances, not exception types.",
+            },
+            KNOWLEDGE,
+        )
 
 
 def test_verification_rejects_non_verbatim_evidence():
