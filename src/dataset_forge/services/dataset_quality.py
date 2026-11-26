@@ -13,9 +13,20 @@ _STOP_WORDS = {
 }
 
 
+def _normalise_token(token: str) -> str:
+    """Apply a deliberately small plural normalisation for common English nouns."""
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith(("ches", "shes", "xes", "zes")):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        return token[:-1]
+    return token
+
+
 def _tokens(value: str) -> set[str]:
     return {
-        token.casefold()
+        _normalise_token(token.casefold())
         for token in _TOKEN_PATTERN.findall(value)
         if token.casefold() not in _STOP_WORDS
     }
@@ -96,7 +107,9 @@ class DatasetQualityService:
             for item in knowledge_items:
                 source_tokens = _tokens(item["content"])
                 combined_source_tokens.update(source_tokens)
-                if prompt_tokens and not prompt_tokens.intersection(source_tokens):
+                # One shared generic term (for example, "exception") is
+                # insufficient evidence that a knowledge item supports this prompt.
+                if len(prompt_tokens.intersection(source_tokens)) < 2:
                     off_topic_items.append(item)
 
             if answer_tokens and not answer_tokens.intersection(combined_source_tokens):
