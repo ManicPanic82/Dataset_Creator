@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from dataset_forge.services.ai_providers import AIProvider
+from dataset_forge.storage.dataset_record_repository import DATASET_TYPES
 
 MAX_RECORD_CHARS = 12_000
 MAX_KNOWLEDGE_ITEMS = 20
@@ -54,7 +55,7 @@ class DatasetVerificationService:
         score = raw["score"]
         summary = raw["summary"]
         findings = raw["findings"]
-        if verdict not in {"pass", "review", "fail"}:
+        if not isinstance(verdict, str) or verdict not in {"pass", "review", "fail"}:
             raise ValueError("The verifier returned an invalid verdict.")
         if (
             not isinstance(score, int) or isinstance(score, bool)
@@ -79,9 +80,9 @@ class DatasetVerificationService:
                 "severity", "category", "claim", "explanation", "knowledge_id", "evidence"
             }:
                 raise ValueError("A verifier finding has an unexpected structure.")
-            if finding["severity"] not in {"low", "medium", "high"}:
+            if not isinstance(finding["severity"], str) or finding["severity"] not in {"low", "medium", "high"}:
                 raise ValueError("A verifier finding has an invalid severity.")
-            if finding["category"] not in {
+            if not isinstance(finding["category"], str) or finding["category"] not in {
                 "relevance", "unsupported_claim", "mixed_topics", "clarity", "completeness"
             }:
                 raise ValueError("A verifier finding has an invalid category.")
@@ -117,6 +118,8 @@ class DatasetVerificationService:
         payload: dict[str, Any],
         provenance: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if dataset_type not in DATASET_TYPES:
+            raise ValueError("Unsupported dataset type for semantic verification.")
         if not isinstance(payload, dict) or not isinstance(provenance, list):
             raise ValueError("A dataset payload and provenance list are required.")
         record_text = json.dumps(payload, ensure_ascii=False)
@@ -142,6 +145,9 @@ class DatasetVerificationService:
             content = item["content"]
             if len(content) > MAX_KNOWLEDGE_CHARS:
                 content = content[:MAX_KNOWLEDGE_CHARS]
+            sources = item.get("sources", [])
+            if not isinstance(sources, list):
+                raise ValueError("Provenance sources must be a list.")
             knowledge.append({
                 "knowledge_id": knowledge_id,
                 "kind": str(item.get("kind", ""))[:80],
@@ -152,7 +158,7 @@ class DatasetVerificationService:
                         "title": str(source.get("title", ""))[:300],
                         "evidence": str(source.get("evidence", ""))[:1_000],
                     }
-                    for source in item.get("sources", [])
+                    for source in sources
                     if isinstance(source, dict)
                 ][:10],
             })
