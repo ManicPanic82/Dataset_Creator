@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -11,6 +12,13 @@ from dataset_forge.storage.dataset_record_repository import (
     DatasetRecordRepository,
     is_valid_dataset_payload,
 )
+
+
+SPLIT_PROFILES = {
+    "standard": {"train": 0.8, "validation": 0.1, "test": 0.1},
+    "training_heavy": {"train": 0.9, "validation": 0.05, "test": 0.05},
+    "balanced": {"train": 0.7, "validation": 0.15, "test": 0.15},
+}
 
 
 class DatasetExportService:
@@ -62,7 +70,13 @@ class DatasetExportService:
     ) -> dict[str, Any]:
         """Write reproducible accepted-record train/validation/test JSONL files."""
         ratios = (train_ratio, validation_ratio, test_ratio)
-        if any(not isinstance(ratio, (int, float)) or ratio <= 0 for ratio in ratios):
+        if any(
+            isinstance(ratio, bool)
+            or not isinstance(ratio, (int, float))
+            or not math.isfinite(ratio)
+            or ratio <= 0
+            for ratio in ratios
+        ):
             raise ValueError("Split ratios must all be positive numbers.")
         if abs(sum(ratios) - 1.0) > 1e-6:
             raise ValueError("Split ratios must sum to 1.0.")
