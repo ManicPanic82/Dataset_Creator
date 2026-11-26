@@ -151,3 +151,22 @@ def test_verification_allows_finding_without_exact_support_quote():
     result = service.verify("instruction", {"instruction": "Q", "output": "A"}, KNOWLEDGE)
 
     assert result["findings"][0]["evidence"] == ""
+
+
+
+def test_verification_rejects_invalid_dataset_type_before_provider_call():
+    provider = StubProvider(_report())
+    service = DatasetVerificationService(provider, "model")
+
+    with pytest.raises(ValueError, match="Unsupported dataset type"):
+        service.verify("unknown", {"question": "Q", "answer": "A"}, KNOWLEDGE)
+
+    assert provider.calls == []
+
+
+def test_verification_rejects_malformed_unhashable_verdict():
+    provider = StubProvider(_report(verdict=["pass"]))
+    service = DatasetVerificationService(provider, "model")
+
+    with pytest.raises(ValueError, match="invalid verdict"):
+        service.verify("question_answer", {"question": "Q", "answer": "A"}, KNOWLEDGE)
