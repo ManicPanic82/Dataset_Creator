@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+import re
+from typing import Any
+
+_TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{2,}")
+_STOP_WORDS = {
+    "about", "after", "again", "also", "among", "because", "before", "being",
+    "between", "could", "does", "each", "from", "have", "into", "must", "only",
+    "other", "over", "same", "should", "some", "such", "than", "that", "their",
+    "them", "then", "there", "these", "they", "this", "those", "through", "under",
+    "very", "what", "when", "where", "which", "while", "with", "would", "your",
+}
+
+
+def _tokens(value: str) -> set[str]:
+    return {
+        token.casefold()
+        for token in _TOKEN_PATTERN.findall(value)
+        if token.casefold() not in _STOP_WORDS
+    }
+
+
+def _record_text(dataset_type: str, payload: dict[str, Any]) -> tuple[str, str]:
+    if dataset_type == "instruction":
+        return payload.get("instruction", ""), payload.get("output", "")
+    if dataset_type == "question_answer":
+        return payload.get("question", ""), payload.get("answer", "")
+    messages = payload.get("messages", [])
+    prompt = " ".join(
+        message.get("content", "")
+        for message in messages
+        if message.get("role") == "user"
+    )
+    answer = " ".join(
+        message.get("content", "")
+        for message in messages
+        if message.get("role") == "assistant"
+    )
+    return prompt, answer
+
+
+class DatasetQualityService:
+    """Provide explainable heuristic checks; never auto-approve a dataset record."""
+
+    @staticmethod
+    def assess(
+        dataset_type: str,
+        payload: dict[str, Any],
+        provenance: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        prompt, answer = _record_text(dataset_type, payload)
+        prompt_tokens = _tokens(prompt)
+        answer_tokens = _tokens(answer)
+        flags: list[dict[str, str]] = []
+
+        if not prompt_tokens or not answer_tokens:
+            flags.append({
+                "code": "missing_content",
+                "severity": "high",
+                "message": "The instruction/question or answer has too little text to assess.",
+            })
+        elif not prompt_tokens.intersection(answer_tokens):
+            flags.append({
+                "code": "low_prompt_alignment",
+                "severity": "high",
+                "message": "The answer shares no key terms with the instruction or question.",
+            })
+
+        if len(answer.split()) < 4:
+            flags.append({
+                "code": "very_short_answer",
+                "severity": "medium",
+                "message": "The answer is very short; check that it is complete.",
+            })
+        if len(answer.split()) > 180:
+            flags.append({
+                "code": "long_answer",
+                "severity": "medium",
+                "message": "The answer is unusually long; check for unrelated detail.",
+            })
+
+        knowledge_items = [
+            item for item in provenance
+            if isinstance(item, dict) and isinstance(item.get("content"), str)
+        ]
+        if not knowledge_items:
+            flags.append({
+                "code": "missing_provenance",
+                "severity": "high",
+                "message": "No supporting knowledge content is available for quality review.",
+            })
+        else:
+            combined_source_tokens: set[str] = set()
+            off_topic_items = []
+            for item in knowledge_items:
+                source_tokens = _tokens(item["content"])
+                combined_source_tokens.update(source_tokens)
+                if prompt_tokens and not prompt_tokens.intersection(source_tokens):
+                    off_topic_items.append(item)
+
+            if answer_tokens and not answer_tokens.intersection(combined_source_tokens):
+                flags.append({
+                    "code": "weak_source_overlap",
+                    "severity": "medium",
+                    "message": (
+                        "The answer has little exact-word overlap with its supporting "
+                        "knowledge. Check paraphrases and factual support manually."
+                    ),
+                })
+            if len(knowledge_items) > 1 and off_topic_items:
+                flags.append({
+                    "code": "possibly_mixed_topics",
+                    "severity": "high",
+                    "message": (
+                        f"{len(off_topic_items)} of {len(knowledge_items)} linked knowledge "
+                        "items share no key terms with the instruction or question. "
+                        "Check whether the record combines unrelated facts."
+                    ),
+                })
+
+        deductions = sum(
+            30 if flag["severity"] == "high" else 15
+            for flag in flags
+        )
+        score = max(0, 100 - deductions)
+        return {
+            "score": score,
+            "label": (
+                "Review carefully" if any(flag["severity"] == "high" for flag in flags)
+                else "Looks consistent" if not flags
+                else "Check warnings"
+            ),
+            "flags": flags,
+            "method": "heuristic",
+            "disclaimer": (
+                "Heuristic screening only. Word overlap cannot prove semantic relevance "
+                "or factual correctness. Review the answer and source evidence yourself."
+            ),
+        }
