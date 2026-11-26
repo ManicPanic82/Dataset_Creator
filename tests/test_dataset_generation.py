@@ -200,3 +200,58 @@ def test_generation_supports_instruction_and_conversation_shapes(
     assert generated[0]["dataset_type"] == dataset_type
     assert generated[0]["payload"] == data
     assert generated[0]["review_status"] == "pending_review"
+
+
+
+def test_editing_record_resets_review_and_preserves_provenance(generation_setup):
+    project, knowledge_id, source_id, _, records, _ = generation_setup
+    record_id = records.add(
+        project["id"],
+        "question_answer",
+        {"question": "What is a function?", "answer": "Reusable code."},
+        [knowledge_id],
+    )
+    records.update_review(record_id, "accepted")
+    before = records.get(record_id)
+
+    records.update_payload(
+        record_id,
+        {"question": "Define a function.", "answer": "A reusable block of code."},
+    )
+
+    updated = records.get(record_id)
+    assert updated["payload"] == {
+        "question": "Define a function.",
+        "answer": "A reusable block of code.",
+    }
+    assert updated["review_status"] == "pending_review"
+    assert updated["provenance"] == before["provenance"]
+    assert updated["provenance"][0]["sources"][0]["source_id"] == source_id
+
+
+def test_editing_record_rejects_invalid_schema_without_changing_record(generation_setup):
+    project, knowledge_id, _, _, records, _ = generation_setup
+    record_id = records.add(
+        project["id"],
+        "question_answer",
+        {"question": "What is a function?", "answer": "Reusable code."},
+        [knowledge_id],
+    )
+    before = records.get(record_id)
+
+    with pytest.raises(ValueError, match="dataset schema"):
+        records.update_payload(
+            record_id,
+            {"question": "Missing answer key"},
+        )
+
+    assert records.get(record_id) == before
+
+
+def test_editing_unknown_record_raises_key_error(generation_setup):
+    _, _, _, _, records, _ = generation_setup
+    with pytest.raises(KeyError):
+        records.update_payload(
+            "missing-record",
+            {"question": "Question?", "answer": "Answer."},
+        )
