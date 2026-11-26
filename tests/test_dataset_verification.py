@@ -42,7 +42,9 @@ def _report(**overrides):
                 "severity": "medium",
                 "category": "unsupported_claim",
                 "claim": "They must be exception instances, not exception types.",
-                "explanation": "The source supports this claim, but the answer adds an implication.",
+                "explanation": (
+                    "The source supports this claim, but the answer adds an implication."
+                ),
                 "knowledge_id": "knowledge-1",
                 "evidence": "must be instances rather than exception types",
             }
@@ -89,7 +91,14 @@ def test_verification_rejects_invalid_top_level_response(overrides, message):
     service = DatasetVerificationService(StubProvider(_report(**overrides)), "model")
 
     with pytest.raises(ValueError, match=message):
-        service.verify("instruction", {"instruction": "Q", "output": "A"}, KNOWLEDGE)
+        service.verify(
+            "instruction",
+            {
+                "instruction": "Q",
+                "output": "They must be exception instances, not exception types.",
+            },
+            KNOWLEDGE,
+        )
 
 
 def test_verification_rejects_unknown_knowledge_reference():
@@ -148,7 +157,14 @@ def test_verification_allows_finding_without_exact_support_quote():
         StubProvider(_report(findings=[finding])), "model"
     )
 
-    result = service.verify("instruction", {"instruction": "Q", "output": "A"}, KNOWLEDGE)
+    result = service.verify(
+        "instruction",
+        {
+            "instruction": "Q",
+            "output": "They must be exception instances, not exception types.",
+        },
+        KNOWLEDGE,
+    )
 
     assert result["findings"][0]["evidence"] == ""
 
@@ -174,7 +190,9 @@ def test_verification_rejects_malformed_unhashable_verdict():
 
 
 def test_verification_rejects_claim_not_present_in_answer():
-    finding = _report()["findings"][0] | {"claim": "The source says something else entirely."}
+    finding = _report()["findings"][0] | {
+        "claim": "The source says something else entirely."
+    }
     service = DatasetVerificationService(
         StubProvider(_report(findings=[finding])), "model"
     )
