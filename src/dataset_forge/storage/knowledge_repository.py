@@ -111,6 +111,19 @@ class KnowledgeRepository:
             )
         return item_id
 
+    def list_extracted_sources(self, project_id: str) -> list[dict[str, Any]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """SELECT s.id, s.url, s.title, s.domain, e.final_url,
+                          e.extracted_text, e.fetched_at
+                   FROM source_candidates s
+                   JOIN source_extractions e ON e.source_id = s.id
+                   WHERE s.project_id = ?
+                   ORDER BY s.url""",
+                (project_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def get(self, knowledge_id: str) -> dict[str, Any] | None:
         with self.database.connect() as connection:
             row = connection.execute(
