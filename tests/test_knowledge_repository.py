@@ -243,12 +243,16 @@ def test_generation_context_includes_only_accepted_knowledge_and_provenance(
         "reusable block of code",
         "function definition",
     }
+    selected = KnowledgeContextService(repository).build_context(
+        project["id"], [accepted_id]
+    )
+    assert len(selected["knowledge_items"]) == 1
 
 
 def test_generation_context_rejects_unaccepted_or_cross_project_selection(
     prepared_sources,
 ):
-    database, project, _, source_ids, other_source_id = prepared_sources
+    database, project, _, source_ids, _ = prepared_sources
     repository = KnowledgeRepository(database)
     pending_id = repository.add(
         project["id"], "fact", "Pending material", source_ids[:1]
