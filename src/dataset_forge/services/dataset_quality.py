@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 _TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{2,}")
-_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\\s+")
+_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 _STOP_WORDS = {
     "about", "after", "again", "also", "among", "an", "and", "are", "as", "at",
     "because", "before", "being", "between", "by", "can", "could", "do", "does",
