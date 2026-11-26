@@ -107,6 +107,8 @@ class DatasetGenerationService:
                 ):
                     return None
                 expected_role = "assistant" if expected_role == "user" else "user"
+            if messages[-1]["role"] != "assistant":
+                return None
         else:
             return None
         return data, knowledge_ids
