@@ -96,14 +96,14 @@ class DatasetVerificationService:
             for key, limit in (("claim", 500), ("explanation", 800), ("evidence", 1_000)):
                 if not isinstance(finding[key], str) or len(finding[key]) > limit:
                     raise ValueError(f"Verifier finding {key} is invalid or too long.")
-            if finding["claim"] and finding["claim"] not in answer_text:
-                raise ValueError("Verifier finding claim is not an exact excerpt from the answer.")
             knowledge_id = finding["knowledge_id"]
             if not isinstance(knowledge_id, str) or knowledge_id not in knowledge:
                 raise ValueError("A verifier finding references unknown knowledge.")
             evidence = finding["evidence"]
             if evidence and evidence not in knowledge[knowledge_id]:
                 raise ValueError("Verifier evidence is not an exact quote from its knowledge item.")
+            if finding["claim"] and finding["claim"] not in answer_text:
+                raise ValueError("Verifier finding claim is not an exact excerpt from the answer.")
             if not finding["explanation"].strip():
                 raise ValueError("Verifier finding explanations cannot be empty.")
             clean_findings.append(dict(finding))
