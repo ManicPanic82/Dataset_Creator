@@ -399,7 +399,6 @@ class DatasetBuilderPage(QWidget):
         self.verify_all_button.setEnabled(False)
         self.status.setText(f"Running advisory AI verification with {model}...")
 
-
     def _verify_all_records(self) -> None:
         if self.project_id is None:
             self.status.setText("Open a project before running batch verification.")
@@ -475,7 +474,10 @@ class DatasetBuilderPage(QWidget):
     def _task_succeeded(self, task_id: str, result: object) -> None:
         if task_id == self.BATCH_VERIFICATION_TASK_ID:
             if isinstance(result, dict):
-                self.verification_reports.update(result.get("reports", {}))
+                batch_reports = result.get("reports", {})
+                self.verification_reports.update(batch_reports)
+                for record_id in batch_reports:
+                    self.verification_errors.pop(record_id, None)
                 self.verification_errors.update(result.get("errors", {}))
                 self.quality_reports.update(result.get("quality_reports", {}))
                 self._update_record_list_labels()
