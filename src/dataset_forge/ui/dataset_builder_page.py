@@ -486,6 +486,7 @@ class DatasetBuilderPage(QWidget):
             return
         self.verify_button.setEnabled(False)
         self.verify_all_button.setEnabled(False)
+        self._set_review_controls_enabled(False)
         self.status.setText(
             f"Preparing batch review of {len(records)} record(s) with {model}..."
         )
