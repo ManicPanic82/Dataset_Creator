@@ -122,10 +122,16 @@ class DatasetGenerationService:
     ) -> list[dict[str, Any]]:
         if dataset_type not in DATASET_TYPES:
             raise ValueError(f"Unsupported dataset type: {dataset_type!r}.")
-        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= MAX_GENERATION_BATCH:
+        if (
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 1 <= count <= MAX_GENERATION_BATCH
+        ):
             raise ValueError(f"Batch size must be between 1 and {MAX_GENERATION_BATCH}.")
         if difficulty not in DIFFICULTY_LEVELS:
-            raise ValueError("Difficulty must be beginner, intermediate, advanced, expert, or mixed.")
+            raise ValueError(
+                "Difficulty must be beginner, intermediate, advanced, expert, or mixed."
+            )
 
         context = self.knowledge_context.build_context(project_id, knowledge_ids)
         items = context["knowledge_items"]
