@@ -96,6 +96,45 @@ class KnowledgeRepository:
                 ).fetchone()
                 if extraction is None:
                     raise ValueError("Knowledge provenance requires an extracted source.")
+            existing_rows = connection.execute(
+                """SELECT id, content FROM knowledge_items
+                   WHERE project_id = ? AND kind = ?""",
+                (project_id, clean_kind),
+            ).fetchall()
+            fingerprint = " ".join(clean_content.casefold().split())
+            for existing in existing_rows:
+                existing_fingerprint = " ".join(
+                    existing["content"].casefold().split()
+                )
+                if existing_fingerprint != fingerprint:
+                    continue
+                existing_id = existing["id"]
+                for source_id in source_ids:
+                    source_link = connection.execute(
+                        """SELECT evidence FROM knowledge_item_sources
+                           WHERE knowledge_id = ? AND source_id = ?""",
+                        (existing_id, source_id),
+                    ).fetchone()
+                    new_evidence = evidence.get(source_id, "").strip()
+                    if source_link is None:
+                        connection.execute(
+                            """INSERT INTO knowledge_item_sources
+                               (knowledge_id, source_id, evidence)
+                               VALUES (?, ?, ?)""",
+                            (existing_id, source_id, new_evidence),
+                        )
+                    elif not source_link["evidence"] and new_evidence:
+                        connection.execute(
+                            """UPDATE knowledge_item_sources SET evidence = ?
+                               WHERE knowledge_id = ? AND source_id = ?""",
+                            (new_evidence, existing_id, source_id),
+                        )
+                connection.execute(
+                    "UPDATE knowledge_items SET updated_at = ? WHERE id = ?",
+                    (now, existing_id),
+                )
+                return existing_id
+
             connection.execute(
                 """INSERT INTO knowledge_items
                    (id, project_id, kind, content, confidence, review_status,
