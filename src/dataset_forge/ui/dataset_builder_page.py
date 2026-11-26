@@ -248,12 +248,35 @@ class DatasetBuilderPage(QWidget):
             return
         records = self.record_repository.list_for_project(self.project_id)
         for record in records:
-            item = QListWidgetItem(
-                f"[{record['review_status']}] {record['dataset_type']} · "
-                f"{self._record_summary(record['payload'])}"
-            )
+            item = QListWidgetItem(self._record_list_label(record))
             item.setData(Qt.ItemDataRole.UserRole, record["id"])
             self.record_list.addItem(item)
+
+    def _record_list_label(self, record: dict) -> str:
+        parts = [f"[{record['review_status']}]"]
+        quality = self.quality_reports.get(record["id"])
+        if quality is not None:
+            parts.append(f"[Quality {quality['score']}/100]")
+        verification = self.verification_reports.get(record["id"])
+        if verification is not None:
+            parts.append(
+                f"[AI {verification['verdict'].upper()} · {verification['score']}]"
+            )
+        elif record["id"] in self.verification_errors:
+            parts.append("[AI ERROR]")
+        parts.extend([
+            record["dataset_type"],
+            self._record_summary(record["payload"]),
+        ])
+        return " ".join(parts)
+
+    def _update_record_list_labels(self) -> None:
+        for index in range(self.record_list.count()):
+            item = self.record_list.item(index)
+            record_id = item.data(Qt.ItemDataRole.UserRole)
+            record = self.record_repository.get(record_id)
+            if record is not None:
+                item.setText(self._record_list_label(record))
 
     @staticmethod
     def _record_summary(payload: dict) -> str:
@@ -454,6 +477,7 @@ class DatasetBuilderPage(QWidget):
                 self.verification_reports.update(result.get("reports", {}))
                 self.verification_errors.update(result.get("errors", {}))
                 self.quality_reports.update(result.get("quality_reports", {}))
+                self._update_record_list_labels()
                 current = self.record_list.currentItem()
                 if current is not None:
                     self._show_record(current, None)
@@ -474,6 +498,7 @@ class DatasetBuilderPage(QWidget):
                 if isinstance(record_id, str):
                     self.verification_reports[record_id] = result["report"]
                     self.verification_errors.pop(record_id, None)
+                    self._update_record_list_labels()
                     if self.active_record_id == record_id:
                         current = self.record_list.currentItem()
                         self._show_record(current, None)
