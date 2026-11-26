@@ -5,7 +5,7 @@ import json
 import pytest
 
 from dataset_forge.services.crawler import ExtractedPage
-from dataset_forge.services.dataset_export import DatasetExportService
+from dataset_forge.services.dataset_export import DatasetExportService, SPLIT_PROFILES
 from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
@@ -214,3 +214,31 @@ def test_export_splits_can_disable_provenance(export_setup, tmp_path):
     assert all(result[name]["provenance_path"] is None for name in
                ("train", "validation", "test"))
     assert not list(tmp_path.glob("*.provenance.jsonl"))
+
+@pytest.mark.parametrize("invalid_ratio", [float("nan"), float("inf"), float("-inf"), True])
+def test_export_splits_reject_non_finite_or_boolean_ratios(
+    export_setup, tmp_path, invalid_ratio
+):
+    project, _, records = export_setup
+    with pytest.raises(ValueError, match="positive numbers"):
+        DatasetExportService(records).export_splits(
+            project["id"],
+            "question_answer",
+            tmp_path,
+            train_ratio=invalid_ratio,
+            validation_ratio=0.1,
+            test_ratio=0.1,
+        )
+
+
+def test_export_profiles_define_valid_split_targets():
+    assert SPLIT_PROFILES == {
+        "standard": {"train": 0.8, "validation": 0.1, "test": 0.1},
+        "training_heavy": {"train": 0.9, "validation": 0.05, "test": 0.05},
+        "balanced": {"train": 0.7, "validation": 0.15, "test": 0.15},
+    }
+    assert all(
+        sum(profile.values()) == pytest.approx(1.0)
+        and all(value > 0 for value in profile.values())
+        for profile in SPLIT_PROFILES.values()
+    )
