@@ -197,16 +197,33 @@ def domain_from_url(url: str) -> str:
 
 
 def normalize_domain(value: str) -> str:
-    domain = value.strip().lower().rstrip(".")
-    if domain.startswith("*."):
-        domain = domain[2:]
-    if not domain or "/" in domain or ":" in domain or "@" in domain:
+    raw = value.strip().lower()
+    if raw.startswith("*."):
+        raw = raw[2:]
+    # Research models sometimes return a useful documentation URL/path instead
+    # of a bare hostname. Domain filters operate at host level, so keep the
+    # hostname and intentionally discard the path.
+    candidate = raw if "://" in raw else f"//{raw}"
+    try:
+        parsed = urlsplit(candidate)
+        domain = parsed.hostname or ""
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"Invalid domain filter: {value!r}") from exc
+    if (
+        not domain
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ValueError(f"Invalid domain filter: {value!r}")
     try:
-        domain = domain.encode("idna").decode("ascii")
+        domain = domain.encode("idna").decode("ascii").lower().rstrip(".")
     except UnicodeError as exc:
         raise ValueError(f"Invalid domain filter: {value!r}") from exc
-    if _is_unsafe_host(domain):
+    if not domain or _is_unsafe_host(domain):
         raise ValueError("Local and private domains cannot be used as source filters.")
     return domain
 
