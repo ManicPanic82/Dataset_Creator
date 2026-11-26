@@ -33,7 +33,10 @@ Return exactly one JSON object with:
   - knowledge_id: one supplied knowledge ID that supports or was expected to support the claim
   - evidence: exact verbatim quote from that knowledge item's content
 
-Every finding must cite a supplied knowledge_id and an evidence quote copied exactly from that item's content. Never invent evidence or IDs. If no exact supporting quote exists, use an empty evidence string and explain that support is absent. Do not rewrite the record. Return JSON only."""
+Every finding must cite a supplied knowledge_id and an evidence quote copied exactly
+from that item's content. Never invent evidence or IDs. If no exact supporting quote
+exists, use an empty evidence string and explain that support is absent. Do not rewrite
+the record. Return JSON only."""
 
 
 class DatasetVerificationService:
@@ -80,7 +83,11 @@ class DatasetVerificationService:
                 "severity", "category", "claim", "explanation", "knowledge_id", "evidence"
             }:
                 raise ValueError("A verifier finding has an unexpected structure.")
-            if not isinstance(finding["severity"], str) or finding["severity"] not in {"low", "medium", "high"}:
+            valid_severities = {"low", "medium", "high"}
+            if (
+                not isinstance(finding["severity"], str)
+                or finding["severity"] not in valid_severities
+            ):
                 raise ValueError("A verifier finding has an invalid severity.")
             if not isinstance(finding["category"], str) or finding["category"] not in {
                 "relevance", "unsupported_claim", "mixed_topics", "clarity", "completeness"
