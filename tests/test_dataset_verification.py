@@ -125,7 +125,14 @@ def test_verification_rejects_non_verbatim_evidence():
     )
 
     with pytest.raises(ValueError, match="exact quote"):
-        service.verify("instruction", {"instruction": "Q", "output": "A"}, KNOWLEDGE)
+        service.verify(
+            "instruction",
+            {
+                "instruction": "Q",
+                "output": "They must be exception instances, not exception types.",
+            },
+            KNOWLEDGE,
+        )
 
 
 def test_verification_rejects_oversized_record_before_provider_call():
