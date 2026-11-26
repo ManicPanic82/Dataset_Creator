@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +103,7 @@ class DatasetExportService:
         validation_ratio: float = 0.1,
         test_ratio: float = 0.1,
         seed: int = 42,
+        split_profile: str = "custom",
         include_provenance: bool = True,
         deduplicate: bool = False,
     ) -> dict[str, Any]:
@@ -220,9 +221,11 @@ class DatasetExportService:
             "project_id": project_id,
             "dataset_type": dataset_type,
             "export_mode": "train_validation_test",
+            "split_profile": split_profile,
             "available_accepted_records": len(matching) + duplicates,
-            "exported_records": sum(partition["count"] for partition in results.values()
-                                    if isinstance(partition, dict) and "count" in partition),
+            "exported_records": sum(
+                results[name]["count"] for name in ("train", "validation", "test")
+            ),
             "skipped_invalid_records": skipped,
             "duplicates_removed": duplicates,
             "deduplicate_exact": deduplicate,
