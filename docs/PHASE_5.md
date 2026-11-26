@@ -17,7 +17,7 @@ This branch introduces a storage repository for knowledge items. Supported initi
 - Comparison
 - Troubleshooting
 
-Each item contains its text, optional confidence score, review status, timestamps, and one or more source references. Source references can include evidence snippets. Items cannot be created unless every cited source belongs to the same project and has a saved extraction. The repository is now exposed through a Knowledge Pool UI for filtering, inspecting provenance, and reviewing items. Automatic AI extraction is not implemented yet.
+Each item contains its text, optional confidence score, review status, timestamps, and one or more source references. Source references can include evidence snippets. Items cannot be created unless every cited source belongs to the same project and has a saved extraction. The repository is now exposed through a Knowledge Pool UI for filtering, inspecting provenance, and reviewing items. AI extraction is available through the selected provider and runs in a background task.
 
 ## Review states
 
@@ -43,6 +43,19 @@ Each item contains its text, optional confidence score, review status, timestamp
 - Inspect full content, confidence, and source references/evidence.
 - Set review status to accepted, rejected, or pending.
 - Delete unwanted items.
+
+## AI extraction workflow
+
+- Select an extracted source from the current project in Knowledge Pool.
+- Use the configured provider and default model from Settings.
+- Read saved extraction snapshots only; the workflow does not refetch websites.
+- Split source text into bounded 6,000-character chunks, with at most eight chunks per source.
+- Request JSON candidates with type, content, verbatim evidence, and optional confidence.
+- Validate item type, size, confidence, duplicate content, and exact evidence substring before saving.
+- Save candidates as pending and retain source provenance.
+- Run in the background and report progress. Model output is data only and is never executed.
+
+The initial extraction limit means content beyond the first 48,000 characters of a source is not processed in this checkpoint.
 
 ## Next work
 
