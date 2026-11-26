@@ -133,6 +133,7 @@ def test_research_plan_rejects_unsafe_domain_filters() -> None:
             }
         )
 
+
 def test_research_plan_recovers_root_metadata_nested_under_subtopics() -> None:
     plan = ResearchPlan.from_dict(
         {
