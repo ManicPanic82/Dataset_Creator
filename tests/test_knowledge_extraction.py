@@ -193,7 +193,7 @@ def test_extraction_still_rejects_changed_evidence_wording():
     assert service.extract_source("project-1", "source-1") == 0
     assert repository.items == []
 
-def test_extraction_rejects_evidence_over_word_limit_even_when_verbatim():
+def test_extraction_trims_overlong_verbatim_evidence_from_source_text():
     source_text = "This source contains a deliberately long sentence with enough words "
     source_text += "to exceed the short evidence quotation limit set by the extractor."
     provider = FakeProvider({
@@ -211,5 +211,7 @@ def test_extraction_rejects_evidence_over_word_limit_even_when_verbatim():
         provider, "test-model", repository, FakeSourceContentRepository(source_text)
     )
 
-    assert service.extract_source("project-1", "source-1") == 0
-    assert repository.items == []
+    assert service.extract_source("project-1", "source-1") == 1
+    saved_evidence = repository.items[0][4]["evidence"]["source-1"]
+    assert saved_evidence == " ".join(source_text.split()[:15])
+    assert saved_evidence in source_text
