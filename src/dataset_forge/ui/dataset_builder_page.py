@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from dataset_forge.services.ai_providers import create_provider
 from dataset_forge.services.dataset_generation import DatasetGenerationService
 from dataset_forge.services.dataset_quality import DatasetQualityService
+from dataset_forge.services.dataset_verification import DatasetVerificationService
 from dataset_forge.services.knowledge_context import KnowledgeContextService
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
@@ -30,6 +31,7 @@ class DatasetBuilderPage(QWidget):
     """Generate, inspect and review source-grounded dataset drafts."""
 
     TASK_ID = "dataset_generation"
+    VERIFICATION_TASK_ID = "dataset_verification"
 
     def __init__(
         self,
@@ -46,6 +48,7 @@ class DatasetBuilderPage(QWidget):
         self.provider_config = provider_config
         self.project_id: str | None = None
         self.active_record_id: str | None = None
+        self.verification_reports: dict[str, dict] = {}
         self._build_ui()
         self.task_manager.task_succeeded.connect(self._task_succeeded)
         self.task_manager.task_failed.connect(self._task_failed)
@@ -124,6 +127,9 @@ class DatasetBuilderPage(QWidget):
         self.pending_button = QPushButton("Reset to pending")
         self.pending_button.clicked.connect(lambda: self._set_review("pending_review"))
         review_actions.addWidget(self.pending_button)
+        self.verify_button = QPushButton("Run AI verification")
+        self.verify_button.clicked.connect(self._verify_record)
+        review_actions.addWidget(self.verify_button)
         records_layout.addLayout(review_actions)
         splitter.addWidget(records_panel)
         splitter.setStretchFactor(0, 1)
@@ -275,6 +281,9 @@ class DatasetBuilderPage(QWidget):
             for sentence in flag.get("sentences", []):
                 quality_lines.append(f'  Flagged sentence: "{sentence}"')
         quality_lines.append(quality["disclaimer"])
+        verification = self.verification_reports.get(record_id)
+        if verification:
+            quality_lines.extend(self._verification_lines(verification))
         self.quality_summary.setText("\n".join(quality_lines))
         lines = [
             f"Format: {record['dataset_type']}",
@@ -299,6 +308,61 @@ class DatasetBuilderPage(QWidget):
             lines.append("")
         self.record_details.setPlainText("\n".join(lines))
 
+    @staticmethod
+    def _verification_lines(report: dict) -> list[str]:
+        lines = [
+            "",
+            f"AI verification: {report['verdict'].upper()} · {report['score']}/100",
+            report["summary"],
+        ]
+        for finding in report["findings"]:
+            lines.append(
+                f"- [{finding['severity'].upper()} · {finding['category']}] "
+                f"{finding['explanation']}"
+            )
+            if finding["claim"]:
+                lines.append(f"  Claim: {finding['claim']}")
+            if finding["evidence"]:
+                lines.append(f'  Source quote: "{finding["evidence"]}"')
+            else:
+                lines.append("  Source quote: No exact supporting quote supplied.")
+        lines.append(report["disclaimer"])
+        return lines
+
+    def _verify_record(self) -> None:
+        if self.active_record_id is None:
+            self.status.setText("Select a generated record before verification.")
+            return
+        record = self.record_repository.get(self.active_record_id)
+        if record is None:
+            self.status.setText("The selected record is no longer available.")
+            return
+        try:
+            config, model = self.provider_config()
+            provider = create_provider(config)
+        except (ValueError, TypeError) as exc:
+            self.status.setText(f"Configure a provider and model in Settings: {exc}")
+            return
+
+        record_id = self.active_record_id
+        service = DatasetVerificationService(provider, model)
+
+        def verify(context):
+            context.report_progress(10, "Preparing record and source evidence")
+            report = service.verify(
+                record["dataset_type"], record["payload"], record["provenance"]
+            )
+            context.report_progress(100, "AI verification complete")
+            return {"record_id": record_id, "report": report}
+
+        try:
+            self.task_manager.submit(self.VERIFICATION_TASK_ID, verify)
+        except ValueError as exc:
+            self.status.setText(str(exc))
+            return
+        self.verify_button.setEnabled(False)
+        self.status.setText(f"Running advisory AI verification with {model}...")
+
     def _set_review(self, status: str) -> None:
         if self.active_record_id is None:
             self.status.setText("Select a generated record first.")
@@ -312,6 +376,16 @@ class DatasetBuilderPage(QWidget):
         self.status.setText(f"Dataset record marked {status}.")
 
     def _task_succeeded(self, task_id: str, result: object) -> None:
+        if task_id == self.VERIFICATION_TASK_ID:
+            if isinstance(result, dict) and isinstance(result.get("report"), dict):
+                record_id = result.get("record_id")
+                if isinstance(record_id, str):
+                    self.verification_reports[record_id] = result["report"]
+                    if self.active_record_id == record_id:
+                        current = self.record_list.currentItem()
+                        self._show_record(current, None)
+                    self.status.setText("AI verification complete. Review the advisory findings.")
+            return
         if task_id != self.TASK_ID:
             return
         self._refresh_records()
@@ -327,7 +401,11 @@ class DatasetBuilderPage(QWidget):
     def _task_failed(self, task_id: str, error: str) -> None:
         if task_id == self.TASK_ID:
             self.status.setText(f"Dataset generation failed: {error}")
+        elif task_id == self.VERIFICATION_TASK_ID:
+            self.status.setText(f"AI verification failed: {error}")
 
     def _task_finished(self, task_id: str) -> None:
         if task_id == self.TASK_ID:
             self.generate_button.setEnabled(True)
+        elif task_id == self.VERIFICATION_TASK_ID:
+            self.verify_button.setEnabled(True)
