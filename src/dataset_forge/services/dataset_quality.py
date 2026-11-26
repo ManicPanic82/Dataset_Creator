@@ -5,11 +5,13 @@ from typing import Any
 
 _TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{2,}")
 _STOP_WORDS = {
-    "about", "after", "again", "also", "among", "because", "before", "being",
-    "between", "could", "does", "each", "from", "have", "into", "must", "only",
-    "other", "over", "same", "should", "some", "such", "than", "that", "their",
-    "them", "then", "there", "these", "they", "this", "those", "through", "under",
-    "very", "what", "when", "where", "which", "while", "with", "would", "your",
+    "about", "after", "again", "also", "among", "an", "and", "are", "as", "at",
+    "because", "before", "being", "between", "by", "can", "could", "do", "does",
+    "each", "for", "from", "have", "in", "into", "is", "it", "must", "of", "on",
+    "only", "or", "other", "over", "same", "should", "some", "such", "than",
+    "that", "the", "their", "them", "then", "there", "these", "they", "this",
+    "those", "through", "to", "under", "up", "very", "via", "what", "when",
+    "where", "which", "while", "with", "within", "without", "would", "your",
 }
 
 
