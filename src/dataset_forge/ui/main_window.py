@@ -414,7 +414,6 @@ class MainWindow(QMainWindow):
                 self.research_page.set_project(project_id)
                 self.sources_page.set_project(project_id)
                 self.knowledge_page.set_project(project_id)
-        self.dataset_builder_page.set_project(project_id)
                 self.dataset_builder_page.set_project(project_id)
 
     def closeEvent(self, event) -> None:
@@ -476,6 +475,7 @@ class MainWindow(QMainWindow):
         self.research_page.set_project(project_id)
         self.sources_page.set_project(project_id)
         self.knowledge_page.set_project(project_id)
+        self.dataset_builder_page.set_project(project_id)
         self.settings.set("last_project_id", project_id)
         self.navigation.setCurrentRow(0)
         LOGGER.info("Opened project %s", project_id)
