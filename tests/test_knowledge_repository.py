@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from dataset_forge.services.crawler import ExtractedPage
+from dataset_forge.services.knowledge_context import KnowledgeContextService
 from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
@@ -199,3 +200,88 @@ def test_duplicate_knowledge_adds_new_source_provenance(prepared_sources):
     item = repository.get(first_id)
     assert len(item["sources"]) == 2
     assert {source["id"] for source in item["sources"]} == set(source_ids)
+
+
+def test_generation_context_includes_only_accepted_knowledge_and_provenance(
+    prepared_sources,
+):
+    database, project, _, source_ids, _ = prepared_sources
+    repository = KnowledgeRepository(database)
+    accepted_id = repository.add(
+        project["id"],
+        "definition",
+        "A function is a reusable block of code.",
+        source_ids,
+        evidence={
+            source_ids[0]: "reusable block of code",
+            source_ids[1]: "function definition",
+        },
+        confidence=0.95,
+    )
+    repository.update_review(accepted_id, "accepted")
+    repository.add(project["id"], "fact", "Pending material", source_ids[:1])
+    rejected_id = repository.add(
+        project["id"], "fact", "Rejected material", source_ids[1:]
+    )
+    repository.update_review(rejected_id, "rejected")
+
+    context = KnowledgeContextService(repository).build_context(project["id"])
+
+    assert context["project_id"] == project["id"]
+    assert [item["knowledge_id"] for item in context["knowledge_items"]] == [
+        accepted_id
+    ]
+    item = context["knowledge_items"][0]
+    assert item["kind"] == "definition"
+    assert item["confidence"] == pytest.approx(0.95)
+    assert {source["source_id"] for source in item["sources"]} == set(source_ids)
+    assert {source["url"] for source in item["sources"]} == {
+        "https://example.org/a",
+        "https://example.org/b",
+    }
+    assert {source["evidence"] for source in item["sources"]} == {
+        "reusable block of code",
+        "function definition",
+    }
+
+
+def test_generation_context_rejects_unaccepted_or_cross_project_selection(
+    prepared_sources,
+):
+    database, project, _, source_ids, other_source_id = prepared_sources
+    repository = KnowledgeRepository(database)
+    pending_id = repository.add(
+        project["id"], "fact", "Pending material", source_ids[:1]
+    )
+    with pytest.raises(ValueError, match="must be accepted"):
+        KnowledgeContextService(repository).build_context(
+            project["id"], [pending_id]
+        )
+
+    other_project = ProjectRepository(database).create("Separate project")
+    other_research = ResearchRepository(database)
+    other_research.add_sources(
+        other_project["id"],
+        [SourceCandidate(url="https://other-project.org/", domain="other-project.org")],
+    )
+    other_id = repository.add(
+        other_project["id"],
+        "fact",
+        "Other project material",
+        [other_research.list_sources(other_project["id"])[0]["id"]],
+    )
+    repository.update_review(other_id, "accepted")
+    with pytest.raises(ValueError, match="must be accepted"):
+        KnowledgeContextService(repository).build_context(project["id"], [other_id])
+
+
+def test_generation_context_rejects_duplicate_selection_ids(prepared_sources):
+    database, project, _, source_ids, _ = prepared_sources
+    repository = KnowledgeRepository(database)
+    item_id = repository.add(project["id"], "fact", "Accepted material", source_ids[:1])
+    repository.update_review(item_id, "accepted")
+
+    with pytest.raises(ValueError, match="unique IDs"):
+        KnowledgeContextService(repository).build_context(
+            project["id"], [item_id, item_id]
+        )
