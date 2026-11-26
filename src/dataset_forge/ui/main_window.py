@@ -557,6 +557,7 @@ class MainWindow(QMainWindow):
                 validation_ratio=self.split_validation_ratio.value() / 100,
                 test_ratio=self.split_test_ratio.value() / 100,
                 seed=self.split_seed.value(),
+                split_profile=self.split_profile_combo.currentData(),
                 include_provenance=self.export_provenance_check.isChecked(),
                 deduplicate=self.export_deduplicate_check.isChecked(),
             )
