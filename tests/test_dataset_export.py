@@ -175,10 +175,13 @@ def test_export_splits_are_reproducible_and_keep_provenance(export_setup, tmp_pa
     assert {name: result["count"] for name, result in first.items() if name in
             {"train", "validation", "test"}} == {"train": 8, "validation": 1, "test": 1}
     for name in ("train", "validation", "test"):
-        rows = [json.loads(line) for line in (tmp_path / "one" / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
-        rows2 = [json.loads(line) for line in (tmp_path / "two" / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+        first_path = tmp_path / "one" / f"{name}.jsonl"
+        rows = [json.loads(line) for line in first_path.read_text(encoding="utf-8").splitlines()]
+        second_path = tmp_path / "two" / f"{name}.jsonl"
+        rows2 = [json.loads(line) for line in second_path.read_text(encoding="utf-8").splitlines()]
         assert rows == rows2
-        sidecar = (tmp_path / "one" / f"{name}.provenance.jsonl").read_text(encoding="utf-8").splitlines()
+        sidecar_path = tmp_path / "one" / f"{name}.provenance.jsonl"
+        sidecar = sidecar_path.read_text(encoding="utf-8").splitlines()
         assert len(sidecar) == first[name]["count"]
         assert all(json.loads(row)["provenance"] for row in sidecar)
 
