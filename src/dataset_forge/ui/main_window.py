@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -31,7 +32,7 @@ from dataset_forge.services.ai_providers import (
     ProviderKind,
     create_provider,
 )
-from dataset_forge.services.dataset_export import DatasetExportService
+from dataset_forge.services.dataset_export import DatasetExportService, SPLIT_PROFILES
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
@@ -203,6 +204,33 @@ class MainWindow(QMainWindow):
                 export_form.addRow("Provenance", self.export_provenance_check)
                 page_layout.addLayout(export_form)
                 split_form = QFormLayout()
+                self.split_profile_combo = QComboBox()
+                self.split_profile_combo.addItem("Standard · 80 / 10 / 10", "standard")
+                self.split_profile_combo.addItem("Training-heavy · 90 / 5 / 5", "training_heavy")
+                self.split_profile_combo.addItem("Balanced · 70 / 15 / 15", "balanced")
+                self.split_profile_combo.addItem("Custom", "custom")
+                self.split_profile_combo.currentIndexChanged.connect(
+                    self._apply_split_profile
+                )
+                split_form.addRow("Export profile", self.split_profile_combo)
+                self.split_train_ratio = QDoubleSpinBox()
+                self.split_validation_ratio = QDoubleSpinBox()
+                self.split_test_ratio = QDoubleSpinBox()
+                for control in (
+                    self.split_train_ratio,
+                    self.split_validation_ratio,
+                    self.split_test_ratio,
+                ):
+                    control.setRange(0.01, 99.98)
+                    control.setDecimals(2)
+                    control.setSuffix("%")
+                    control.valueChanged.connect(self._mark_custom_split_profile)
+                self.split_train_ratio.setValue(80.0)
+                self.split_validation_ratio.setValue(10.0)
+                self.split_test_ratio.setValue(10.0)
+                split_form.addRow("Training", self.split_train_ratio)
+                split_form.addRow("Validation", self.split_validation_ratio)
+                split_form.addRow("Test", self.split_test_ratio)
                 self.split_seed = QSpinBox()
                 self.split_seed.setRange(0, 2147483647)
                 self.split_seed.setValue(42)
@@ -479,6 +507,30 @@ class MainWindow(QMainWindow):
                 self.project_management_list.count() - 1
             ).setData(Qt.ItemDataRole.UserRole, project["id"])
 
+    def _apply_split_profile(self, _index: int) -> None:
+        profile = self.split_profile_combo.currentData()
+        ratios = SPLIT_PROFILES.get(profile)
+        if ratios is None:
+            return
+        controls = (
+            self.split_train_ratio,
+            self.split_validation_ratio,
+            self.split_test_ratio,
+        )
+        for control, key in zip(controls, ("train", "validation", "test"), strict=True):
+            control.blockSignals(True)
+            control.setValue(ratios[key] * 100)
+            control.blockSignals(False)
+
+    def _mark_custom_split_profile(self, _value: float) -> None:
+        if not hasattr(self, "split_profile_combo"):
+            return
+        if self.split_profile_combo.currentData() == "custom":
+            return
+        self.split_profile_combo.setCurrentIndex(
+            self.split_profile_combo.findData("custom")
+        )
+
     def _export_splits(self) -> None:
         if self.current_project_id is None:
             self.export_status.setText("Open a project before exporting splits.")
@@ -496,6 +548,9 @@ class MainWindow(QMainWindow):
                 self.current_project_id,
                 dataset_type,
                 directory,
+                train_ratio=self.split_train_ratio.value() / 100,
+                validation_ratio=self.split_validation_ratio.value() / 100,
+                test_ratio=self.split_test_ratio.value() / 100,
                 seed=self.split_seed.value(),
                 include_provenance=self.export_provenance_check.isChecked(),
             )
