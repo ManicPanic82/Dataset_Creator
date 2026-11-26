@@ -124,7 +124,8 @@ def test_knowledge_item_requires_extracted_source(prepared_sources):
     database, project, _, source_ids, _ = prepared_sources
     research = ResearchRepository(database)
     research.add_sources(
-        project["id"], [SourceCandidate(url="https://example.org/not-extracted", domain="example.org")]
+        project["id"],
+        [SourceCandidate(url="https://example.org/not-extracted", domain="example.org")],
     )
     unextracted = [
         source["id"] for source in research.list_sources(project["id"])
