@@ -102,7 +102,9 @@ class DatasetBuilderPage(QWidget):
         self.record_list = QListWidget()
         self.record_list.currentItemChanged.connect(self._show_record)
         records_layout.addWidget(self.record_list, 1)
-        self.quality_summary = QLabel("Quality screening appears when you select a record.")
+        self.quality_summary = QLabel(
+            "Quality screening appears when you select a record."
+        )
         self.quality_summary.setWordWrap(True)
         self.quality_summary.setObjectName("muted")
         records_layout.addWidget(self.quality_summary)
@@ -259,6 +261,7 @@ class DatasetBuilderPage(QWidget):
         record = self.record_repository.get(record_id)
         if record is None:
             self.record_details.clear()
+            self.quality_summary.setText("Record unavailable.")
             return
         self.active_record_id = record_id
         quality = DatasetQualityService.assess(
