@@ -6,6 +6,7 @@ import pytest
 
 from dataset_forge.services.crawler import ExtractedPage
 from dataset_forge.services.dataset_export import SPLIT_PROFILES, DatasetExportService
+from dataset_forge.services.dataset_integrity import DatasetIntegrityService
 from dataset_forge.services.research import SourceCandidate
 from dataset_forge.storage.database import Database
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
@@ -377,3 +378,27 @@ def test_split_export_writes_manifest_with_ratios_seed_and_counts(
         split["provenance_file"] is not None
         for split in manifest["splits"].values()
     )
+
+
+
+def test_export_manifest_integrity_verifies_real_export(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    _add_record(
+        records,
+        project["id"],
+        knowledge_id,
+        {"question": "Can this be checked?", "answer": "Yes, by its manifest."},
+        "accepted",
+    )
+
+    result = DatasetExportService(records).export_project(
+        project["id"],
+        "question_answer",
+        tmp_path / "verified.jsonl",
+    )
+
+    verification = DatasetIntegrityService.verify_manifest(result["manifest_path"])
+
+    assert verification["success"] is True
+    assert verification["checked_files"] == 2
+    assert verification["total_records"] == 2
