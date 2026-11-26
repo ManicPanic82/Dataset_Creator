@@ -84,16 +84,43 @@ class DatasetExportService:
             if record["dataset_type"] == dataset_type
             and not self._valid_payload(dataset_type, record.get("payload"))
         )
-        shuffled = list(matching)
-        random.Random(seed).shuffle(shuffled)
-        total = len(shuffled)
-        train_end = int(total * train_ratio)
-        validation_end = train_end + int(total * validation_ratio)
-        partitions = {
-            "train": shuffled[:train_end],
-            "validation": shuffled[train_end:validation_end],
-            "test": shuffled[validation_end:],
-        }
+        # Group records transitively by shared accepted knowledge IDs to reduce leakage.
+        parents = {record["id"]: record["id"] for record in matching}
+        def find(record_id: str) -> str:
+            while parents[record_id] != record_id:
+                parents[record_id] = parents[parents[record_id]]
+                record_id = parents[record_id]
+            return record_id
+        def union(left: str, right: str) -> None:
+            left_root, right_root = find(left), find(right)
+            if left_root != right_root:
+                parents[right_root] = left_root
+        owners: dict[str, str] = {}
+        for record in matching:
+            for item in record.get("provenance", []):
+                knowledge_id = item.get("knowledge_id")
+                if not knowledge_id:
+                    continue
+                if knowledge_id in owners:
+                    union(record["id"], owners[knowledge_id])
+                else:
+                    owners[knowledge_id] = record["id"]
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for record in matching:
+            groups.setdefault(find(record["id"]), []).append(record)
+        group_list = list(groups.values())
+        random.Random(seed).shuffle(group_list)
+        targets = {"train": len(matching) * train_ratio,
+                   "validation": len(matching) * validation_ratio,
+                   "test": len(matching) * test_ratio}
+        partitions: dict[str, list[dict[str, Any]]] = {
+            "train": [], "validation": [], "test": []}
+        # Assign each whole group to the split with the largest proportional deficit.
+        for group in group_list:
+            name = max(partitions, key=lambda key:
+                       (targets[key] - len(partitions[key])) / targets[key])
+            partitions[name].extend(group)
+        total = len(matching)
 
         directory = Path(output_directory).expanduser()
         directory.mkdir(parents=True, exist_ok=True)
