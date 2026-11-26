@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dataset_forge.services.dataset_export import DatasetExportService
 from dataset_forge.services.ai_providers import (
     RESEARCH_GENERATION_TIMEOUT_SECONDS,
     ProviderConfig,
@@ -76,7 +78,7 @@ class MainWindow(QMainWindow):
         ("Dataset Builder", "Generate, inspect, and review source-grounded dataset records."),
         ("Generation", "Resumable generation workflows will arrive in Phase 6."),
         ("Quality Control", "Validation and review tools will arrive in Phase 7."),
-        ("Projects & Export", "Manage projects now. Dataset export arrives in Phase 8."),
+        ("Projects & Export", "Manage projects and export accepted training records."),
         ("Settings", "Local application preferences and provider configuration."),
     ]
 
@@ -182,6 +184,31 @@ class MainWindow(QMainWindow):
                 create_button = QPushButton("Create project")
                 create_button.clicked.connect(self._create_project)
                 page_layout.addWidget(create_button, alignment=Qt.AlignmentFlag.AlignLeft)
+                page_layout.addSpacing(18)
+                page_layout.addWidget(QLabel("Export accepted dataset records"))
+                export_form = QFormLayout()
+                self.export_format_combo = QComboBox()
+                self.export_format_combo.addItem("Question & answer", "question_answer")
+                self.export_format_combo.addItem(
+                    "Instruction / input / output", "instruction"
+                )
+                self.export_format_combo.addItem("Conversation", "conversational")
+                export_form.addRow("Dataset format", self.export_format_combo)
+                self.export_provenance_check = QCheckBox(
+                    "Write a separate provenance sidecar (.provenance.jsonl)"
+                )
+                self.export_provenance_check.setChecked(True)
+                export_form.addRow("Provenance", self.export_provenance_check)
+                page_layout.addLayout(export_form)
+                export_button = QPushButton("Export accepted records")
+                export_button.clicked.connect(self._export_dataset)
+                page_layout.addWidget(export_button, alignment=Qt.AlignmentFlag.AlignLeft)
+                self.export_status = QLabel(
+                    "Exports include accepted records of the selected format only."
+                )
+                self.export_status.setObjectName("muted")
+                self.export_status.setWordWrap(True)
+                page_layout.addWidget(self.export_status)
             elif title == "Research":
                 self.research_page = ResearchPage(
                     self.projects,
@@ -440,6 +467,43 @@ class MainWindow(QMainWindow):
             self.project_management_list.item(
                 self.project_management_list.count() - 1
             ).setData(Qt.ItemDataRole.UserRole, project["id"])
+
+    def _export_dataset(self) -> None:
+        if self.current_project_id is None:
+            self.export_status.setText("Open a project before exporting a dataset.")
+            return
+        dataset_type = self.export_format_combo.currentData()
+        filename, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export accepted dataset",
+            f"{dataset_type}.jsonl",
+            "JSON Lines (*.jsonl)",
+        )
+        if not filename:
+            return
+        if not filename.casefold().endswith(".jsonl"):
+            filename += ".jsonl"
+        try:
+            result = DatasetExportService(
+                self.dataset_record_repository
+            ).export_project(
+                self.current_project_id,
+                dataset_type,
+                filename,
+                include_provenance=self.export_provenance_check.isChecked(),
+            )
+        except (OSError, ValueError) as exc:
+            self.export_status.setText(f"Export failed: {exc}")
+            QMessageBox.warning(self, "Dataset export failed", str(exc))
+            return
+        message = (
+            f"Exported {result['exported']} accepted record(s). "
+            f"Skipped {result['skipped']} invalid record(s)."
+        )
+        if result["provenance_path"]:
+            message += f"\nProvenance: {result['provenance_path']}"
+        self.export_status.setText(f"{message}\nDataset: {result['path']}")
+        QMessageBox.information(self, "Dataset export complete", message)
 
     def _create_project(self) -> None:
         dialog = NewProjectDialog(self)
