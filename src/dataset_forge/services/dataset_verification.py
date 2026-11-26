@@ -45,7 +45,7 @@ class DatasetVerificationService:
 
     @staticmethod
     def _validate_response(
-        raw: Any, provenance: list[dict[str, Any]]
+        raw: Any, provenance: list[dict[str, Any]], answer_text: str
     ) -> dict[str, Any]:
         if not isinstance(raw, dict):
             raise ValueError("The verifier response must be a JSON object.")
@@ -89,6 +89,8 @@ class DatasetVerificationService:
             for key, limit in (("claim", 500), ("explanation", 800), ("evidence", 1_000)):
                 if not isinstance(finding[key], str) or len(finding[key]) > limit:
                     raise ValueError(f"Verifier finding {key} is invalid or too long.")
+            if finding["claim"] and finding["claim"] not in answer_text:
+                raise ValueError("Verifier finding claim is not an exact excerpt from the answer.")
             knowledge_id = finding["knowledge_id"]
             if not isinstance(knowledge_id, str) or knowledge_id not in knowledge:
                 raise ValueError("A verifier finding references unknown knowledge.")
@@ -177,4 +179,15 @@ class DatasetVerificationService:
                 + json.dumps(user_payload, ensure_ascii=False)
             ),
         )
-        return self._validate_response(response, provenance)
+        if dataset_type == "instruction":
+            answer_text = payload.get("output", "")
+        elif dataset_type == "question_answer":
+            answer_text = payload.get("answer", "")
+        else:
+            answer_text = " ".join(
+                message.get("content", "")
+                for message in payload.get("messages", [])
+                if isinstance(message, dict) and message.get("role") == "assistant"
+                and isinstance(message.get("content"), str)
+            )
+        return self._validate_response(response, provenance, answer_text)
