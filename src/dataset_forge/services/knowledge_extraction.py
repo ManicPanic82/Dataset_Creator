@@ -95,14 +95,6 @@ class KnowledgeExtractionService:
             kind = kind.strip().lower()
             content = content.strip()
             evidence = evidence.strip()
-            if len(evidence.split()) > MAX_EVIDENCE_WORDS:
-                LOGGER.warning(
-                    "Discarding knowledge candidate with overlong evidence "
-                    "(evidence_words=%d, maximum=%d).",
-                    len(evidence.split()),
-                    MAX_EVIDENCE_WORDS,
-                )
-                continue
             if kind not in {
                 "concept", "definition", "fact", "procedure", "example",
                 "code", "comparison", "troubleshooting",
@@ -119,6 +111,15 @@ class KnowledgeExtractionService:
                     len(source_text),
                 )
                 continue
+            evidence_words = list(re.finditer(r"\\S+", matched_evidence))
+            if len(evidence_words) > MAX_EVIDENCE_WORDS:
+                matched_evidence = matched_evidence[:evidence_words[MAX_EVIDENCE_WORDS - 1].end()]
+                LOGGER.info(
+                    "Trimmed exact source evidence to configured word limit "
+                    "(original_words=%d, retained_words=%d).",
+                    len(evidence_words),
+                    MAX_EVIDENCE_WORDS,
+                )
             evidence = matched_evidence
             if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
                 confidence = None
