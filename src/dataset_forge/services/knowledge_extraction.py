@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
 from dataset_forge.services.ai_providers import AIProvider
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _find_verbatim_evidence(evidence: str, source_text: str) -> str | None:
+    """Match exact wording while tolerating whitespace changes from the model.
+
+    The returned value is always sliced from the original source, never model text.
+    """
+    clean = evidence.strip()
+    if not clean:
+        return None
+    parts = re.split(r"\\s+", clean)
+    pattern = r"\\s+".join(re.escape(part) for part in parts)
+    match = re.search(pattern, source_text)
+    return match.group(0) if match else None
+
 
 MAX_SOURCE_CHARS = 48_000
 CHUNK_CHARS = 6_000
@@ -81,9 +97,16 @@ class KnowledgeExtractionService:
                 continue
             if not content or len(content) > 20_000 or not evidence:
                 continue
-            if evidence not in source_text:
-                LOGGER.warning("Discarding knowledge candidate with unsupported evidence.")
+            matched_evidence = _find_verbatim_evidence(evidence, source_text)
+            if matched_evidence is None:
+                LOGGER.warning(
+                    "Discarding knowledge candidate with unsupported evidence "
+                    "(evidence_chars=%d, source_chars=%d).",
+                    len(evidence),
+                    len(source_text),
+                )
                 continue
+            evidence = matched_evidence
             if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
                 confidence = None
             elif not 0.0 <= float(confidence) <= 1.0:
