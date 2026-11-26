@@ -41,7 +41,7 @@ def _report(**overrides):
             {
                 "severity": "medium",
                 "category": "unsupported_claim",
-                "claim": "Nested exceptions must be instances.",
+                "claim": "They must be exception instances, not exception types.",
                 "explanation": "The source supports this claim, but the answer adds an implication.",
                 "knowledge_id": "knowledge-1",
                 "evidence": "must be instances rather than exception types",
@@ -170,3 +170,21 @@ def test_verification_rejects_malformed_unhashable_verdict():
 
     with pytest.raises(ValueError, match="invalid verdict"):
         service.verify("question_answer", {"question": "Q", "answer": "A"}, KNOWLEDGE)
+
+
+
+def test_verification_rejects_claim_not_present_in_answer():
+    finding = _report()["findings"][0] | {"claim": "The source says something else entirely."}
+    service = DatasetVerificationService(
+        StubProvider(_report(findings=[finding])), "model"
+    )
+
+    with pytest.raises(ValueError, match="exact excerpt from the answer"):
+        service.verify(
+            "question_answer",
+            {
+                "question": "What must nested exceptions be?",
+                "answer": "They must be exception instances, not exception types.",
+            },
+            KNOWLEDGE,
+        )
