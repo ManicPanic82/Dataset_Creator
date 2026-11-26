@@ -69,7 +69,7 @@ The `KnowledgeContextService` provides the Phase 6 generation boundary:
 - Duplicate IDs in a selection are rejected.
 - Each prepared item includes its knowledge ID, type, content, confidence, and every linked source URL/title/domain plus its evidence snippet.
 - Pending and rejected items are never silently included.
-- The service prepares structured context only. Dataset schemas, AI prompting, record generation, and UI controls remain Phase 6 work.
+- The service prepares structured context for downstream generation while enforcing the accepted-only boundary.
 
 This keeps generation grounded in reviewed knowledge while preserving enough provenance for generated records to be traced back to the original sources.
 
@@ -90,8 +90,8 @@ The first dataset-generation backend is now available on this feature branch.
 - Rejects unknown or cross-project knowledge references and does not save malformed records.
 - Deduplicates identical records within each batch.
 - Persists generated records as `pending_review`, never as automatically accepted training data.
-- Resolves each record's knowledge links back to source URLs, titles, domains, and evidence snippets.
+- Snapshots each linked source URL, title, domain, and evidence snippet when the record is created, so later source edits or deletion do not erase its provenance.
 
-The generator treats all source-derived knowledge as untrusted reference data. It does not browse, execute model output, or allow the model to create provenance IDs.
+The generator treats all source-derived knowledge as untrusted reference data. It does not browse, execute model output, or allow the model to create provenance IDs. Generated records remain pending review. The source metadata and evidence are snapshotted when the record is saved.
 
 This checkpoint is a backend foundation, not the complete Dataset Builder UI. Schema editing, target distributions, progress/resume, record editing and bulk review, quality checks, and export remain subsequent work. Only the three listed dataset types are currently supported.
