@@ -78,6 +78,7 @@ class DatasetRecordRepository:
         record_id = str(uuid.uuid4())
         now = _now()
         with self.database.connect() as connection:
+            provenance_rows = []
             for knowledge_id in knowledge_ids:
                 row = connection.execute(
                     """SELECT project_id, review_status FROM knowledge_items
@@ -97,8 +98,6 @@ class DatasetRecordRepository:
                 ).fetchall()
                 if not source_rows:
                     raise ValueError("Record provenance requires at least one linked source.")
-                if knowledge_id == knowledge_ids[0]:
-                    provenance_rows = []
                 provenance_rows.extend(
                     (knowledge_id, source["id"], source["url"], source["title"],
                      source["domain"], source["evidence"])
