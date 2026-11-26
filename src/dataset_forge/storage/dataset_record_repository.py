@@ -11,6 +11,48 @@ DATASET_TYPES = {"instruction", "question_answer", "conversational"}
 RECORD_STATUSES = {"pending_review", "accepted", "rejected"}
 
 
+def is_valid_dataset_payload(dataset_type: str, payload: Any) -> bool:
+    """Return whether a payload matches one supported training-record schema."""
+    if not isinstance(payload, dict):
+        return False
+    if dataset_type == "instruction":
+        return (
+            set(payload) == {"instruction", "input", "output"}
+            and isinstance(payload["instruction"], str)
+            and bool(payload["instruction"].strip())
+            and isinstance(payload["input"], str)
+            and isinstance(payload["output"], str)
+            and bool(payload["output"].strip())
+        )
+    if dataset_type == "question_answer":
+        return (
+            set(payload) == {"question", "answer"}
+            and all(
+                isinstance(payload[key], str) and bool(payload[key].strip())
+                for key in ("question", "answer")
+            )
+        )
+    if dataset_type == "conversational":
+        messages = payload.get("messages")
+        if set(payload) != {"messages"} or not isinstance(messages, list):
+            return False
+        if not 2 <= len(messages) <= 6:
+            return False
+        expected_roles = ["user", "assistant"] * 3
+        return (
+            all(
+                isinstance(message, dict)
+                and set(message) == {"role", "content"}
+                and message["role"] == expected_roles[index]
+                and isinstance(message["content"], str)
+                and bool(message["content"].strip())
+                for index, message in enumerate(messages)
+            )
+            and messages[-1]["role"] == "assistant"
+        )
+    return False
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
 
@@ -192,6 +234,32 @@ class DatasetRecordRepository:
             rows = connection.execute(query, params).fetchall()
         records = [self.get(row["id"]) for row in rows]
         return [record for record in records if record is not None]
+
+    def update_payload(self, record_id: str, payload: dict[str, Any]) -> None:
+        """Replace a record payload and return it to pending review."""
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT dataset_type FROM dataset_records WHERE id = ?",
+                (record_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(record_id)
+            dataset_type = row["dataset_type"]
+            if not is_valid_dataset_payload(dataset_type, payload):
+                raise ValueError("Payload does not match the record's dataset schema.")
+            try:
+                payload_json = json.dumps(
+                    payload, ensure_ascii=False, allow_nan=False
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Dataset payload must contain valid JSON values.") from exc
+            connection.execute(
+                """UPDATE dataset_records
+                   SET payload_json = ?, review_status = 'pending_review',
+                       updated_at = ?
+                   WHERE id = ?""",
+                (payload_json, _now(), record_id),
+            )
 
     def update_review(self, record_id: str, status: str) -> None:
         if status not in RECORD_STATUSES:
