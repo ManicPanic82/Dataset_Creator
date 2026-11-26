@@ -39,7 +39,13 @@ class DatasetExportService:
         seen: set[str] = set()
         unique: list[dict[str, Any]] = []
         duplicates = 0
-        for record in records:
+        # Repository listings are newest-first; sort chronologically so the
+        # earliest accepted record is retained with its original provenance.
+        ordered_records = sorted(
+            records,
+            key=lambda record: (record.get("created_at", ""), record["id"]),
+        )
+        for record in ordered_records:
             key = json.dumps(
                 record["payload"],
                 ensure_ascii=False,
