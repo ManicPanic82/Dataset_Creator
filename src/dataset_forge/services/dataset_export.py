@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -214,6 +215,24 @@ class DatasetExportService:
             "groups": len(group_list),
             "ratios": {"train": train_ratio, "validation": validation_ratio, "test": test_ratio},
         })
+        integrity_files: dict[str, dict[str, Any]] = {}
+        for name in ("train", "validation", "test"):
+            dataset_path = Path(results[name]["path"])
+            dataset_bytes = dataset_path.read_bytes()
+            integrity_files[dataset_path.name] = {
+                "sha256": hashlib.sha256(dataset_bytes).hexdigest(),
+                "records": results[name]["count"],
+                "kind": "dataset",
+            }
+            provenance_value = results[name]["provenance_path"]
+            if provenance_value:
+                provenance_path = Path(provenance_value)
+                provenance_bytes = provenance_path.read_bytes()
+                integrity_files[provenance_path.name] = {
+                    "sha256": hashlib.sha256(provenance_bytes).hexdigest(),
+                    "records": results[name]["count"],
+                    "kind": "provenance",
+                }
         manifest_path = directory / "export.manifest.json"
         manifest = {
             "manifest_version": 1,
@@ -233,6 +252,7 @@ class DatasetExportService:
             "seed": seed,
             "ratios": results["ratios"],
             "leakage_groups": len(group_list),
+            "files": integrity_files,
             "splits": {
                 name: {
                     "count": results[name]["count"],
@@ -317,6 +337,19 @@ class DatasetExportService:
             "path": str(destination),
             "provenance_path": str(sidecar_path) if sidecar_path else None,
         }
+        integrity_files = {
+            destination.name: {
+                "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+                "records": result["exported"],
+                "kind": "dataset",
+            }
+        }
+        if sidecar_path is not None:
+            integrity_files[sidecar_path.name] = {
+                "sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
+                "records": result["exported"],
+                "kind": "provenance",
+            }
         manifest_path = destination.with_name(f"{destination.stem}.manifest.json")
         manifest = {
             "manifest_version": 1,
@@ -332,6 +365,7 @@ class DatasetExportService:
             "include_provenance": include_provenance,
             "dataset_file": destination.name,
             "provenance_file": sidecar_path.name if sidecar_path else None,
+            "files": integrity_files,
         }
         result["manifest_path"] = self._write_manifest(manifest_path, manifest)
         return result
