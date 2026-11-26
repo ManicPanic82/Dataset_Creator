@@ -32,6 +32,7 @@ class DatasetBuilderPage(QWidget):
 
     TASK_ID = "dataset_generation"
     VERIFICATION_TASK_ID = "dataset_verification"
+    BATCH_VERIFICATION_TASK_ID = "dataset_batch_verification"
 
     def __init__(
         self,
@@ -134,6 +135,9 @@ class DatasetBuilderPage(QWidget):
         self.verify_button = QPushButton("Run AI verification")
         self.verify_button.clicked.connect(self._verify_record)
         review_actions.addWidget(self.verify_button)
+        self.verify_all_button = QPushButton("Verify all records")
+        self.verify_all_button.clicked.connect(self._verify_all_records)
+        review_actions.addWidget(self.verify_all_button)
         records_layout.addLayout(review_actions)
         splitter.addWidget(records_panel)
         splitter.setStretchFactor(0, 1)
@@ -288,6 +292,9 @@ class DatasetBuilderPage(QWidget):
         verification = self.verification_reports.get(record_id)
         if verification:
             quality_lines.extend(self._verification_lines(verification))
+        verification_error = self.verification_errors.get(record_id)
+        if verification_error:
+            quality_lines.extend(["", f"AI verification error: {verification_error}"])
         self.quality_summary.setPlainText("\n".join(quality_lines))
         lines = [
             f"Format: {record['dataset_type']}",
