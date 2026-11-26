@@ -76,3 +76,22 @@ This keeps generation grounded in reviewed knowledge while preserving enough pro
 ## Remaining Phase 5 work
 
 1. Add deeper content-quality checks and review tooling for larger knowledge pools.
+
+## Phase 6: first grounded-generation backend checkpoint
+
+The first dataset-generation backend is now available on this feature branch.
+
+- Supports instruction, question-and-answer, and conversational record shapes.
+- Generates bounded batches of 1–20 records using the configured AI provider/model.
+- Uses accepted project knowledge only, with an optional explicit knowledge selection.
+- Rejects unsupported dataset types, invalid difficulty values, oversized batches, and empty knowledge selections.
+- Validates every generated record against its exact data shape.
+- Requires each record to reference one or more IDs from the accepted knowledge supplied to the model.
+- Rejects unknown or cross-project knowledge references and does not save malformed records.
+- Deduplicates identical records within each batch.
+- Persists generated records as `pending_review`, never as automatically accepted training data.
+- Resolves each record's knowledge links back to source URLs, titles, domains, and evidence snippets.
+
+The generator treats all source-derived knowledge as untrusted reference data. It does not browse, execute model output, or allow the model to create provenance IDs.
+
+This checkpoint is a backend foundation, not the complete Dataset Builder UI. Schema editing, target distributions, progress/resume, record editing and bulk review, quality checks, and export remain subsequent work. Only the three listed dataset types are currently supported.
