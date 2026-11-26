@@ -4,7 +4,7 @@ import json
 import math
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -217,7 +217,7 @@ class DatasetExportService:
         manifest_path = directory / "export.manifest.json"
         manifest = {
             "manifest_version": 1,
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "created_at_utc": datetime.now(UTC).isoformat(),
             "project_id": project_id,
             "dataset_type": dataset_type,
             "export_mode": "train_validation_test",
@@ -320,7 +320,7 @@ class DatasetExportService:
         manifest_path = destination.with_name(f"{destination.stem}.manifest.json")
         manifest = {
             "manifest_version": 1,
-            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "created_at_utc": datetime.now(UTC).isoformat(),
             "project_id": project_id,
             "dataset_type": dataset_type,
             "export_mode": "single_file",
