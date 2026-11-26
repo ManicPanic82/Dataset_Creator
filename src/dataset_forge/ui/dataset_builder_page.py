@@ -481,14 +481,33 @@ class DatasetBuilderPage(QWidget):
                 current = self.record_list.currentItem()
                 if current is not None:
                     self._show_record(current, None)
-                reports = result.get("reports", {})
-                errors = result.get("errors", {})
-                verdicts = [report["verdict"] for report in reports.values()]
+                project_records = (
+                    self.record_repository.list_for_project(self.project_id)
+                    if self.project_id is not None else []
+                )
+                project_ids = {record["id"] for record in project_records}
+                reports = [
+                    self.verification_reports[record_id]
+                    for record_id in project_ids
+                    if record_id in self.verification_reports
+                ]
+                errors = [
+                    record_id for record_id in project_ids
+                    if record_id in self.verification_errors
+                ]
+                verdicts = [report["verdict"] for report in reports]
+                quality_labels = [
+                    self.quality_reports[record_id]["label"]
+                    for record_id in project_ids if record_id in self.quality_reports
+                ]
                 self.status.setText(
                     f"Batch review complete: {result.get('total', 0)} record(s). "
                     f"AI pass {verdicts.count('pass')} · "
                     f"review {verdicts.count('review')} · "
                     f"fail {verdicts.count('fail')} · errors {len(errors)}. "
+                    f"Heuristic: {quality_labels.count('Looks consistent')} consistent, "
+                    f"{quality_labels.count('Check warnings')} warnings, "
+                    f"{quality_labels.count('Review carefully')} flagged. "
                     f"Verified this run: {result.get('verified_this_run', 0)}."
                 )
             return
@@ -513,7 +532,9 @@ class DatasetBuilderPage(QWidget):
         )
 
     def _task_progress(self, task_id: str, percent: int, message: str) -> None:
-        if task_id in {self.TASK_ID, self.VERIFICATION_TASK_ID, self.BATCH_VERIFICATION_TASK_ID}:
+        if task_id in {
+            self.TASK_ID, self.VERIFICATION_TASK_ID, self.BATCH_VERIFICATION_TASK_ID
+        }:
             self.status.setText(f"{percent}% · {message}")
 
     def _task_failed(self, task_id: str, error: str) -> None:
