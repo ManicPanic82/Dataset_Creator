@@ -60,7 +60,9 @@ class KnowledgePoolPage(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         self.details = QTextEdit()
         self.details.setReadOnly(True)
-        self.details.setPlaceholderText("Select a knowledge item to inspect its content and provenance.")
+        self.details.setPlaceholderText(
+            "Select a knowledge item to inspect its content and provenance."
+        )
         detail_layout.addWidget(self.details, 1)
         actions = QHBoxLayout()
         self.accept_button = QPushButton("Accept")
