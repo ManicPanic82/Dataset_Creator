@@ -52,14 +52,14 @@ Each item contains its text, optional confidence score, review status, timestamp
 - Split source text into bounded 6,000-character chunks, with at most eight chunks per source.
 - Request JSON candidates with type, content, verbatim evidence, and optional confidence.
 - Validate item type, size, confidence, duplicate content, and exact evidence substring before saving.
+- Deduplicate within a project by knowledge type and normalized content (case-insensitive, whitespace-normalized). Repeated extraction reuses the existing item rather than creating another row.
+- When the same knowledge is found in another source, attach its source and evidence to the existing item. Existing review status is preserved.
 - Save candidates as pending and retain source provenance.
 - Run in the background and report progress. Model output is data only and is never executed.
 
 The initial extraction limit means content beyond the first 48,000 characters of a source is not processed in this checkpoint.
 
-## Next work
+## Remaining Phase 5 work
 
-1. Add AI extraction that emits structured knowledge candidates grounded in source text.
-2. Validate model output and verify source references before storage.
-3. Add deduplication and content-quality checks.
-4. Build accepted knowledge into dataset generation with provenance.
+1. Add deeper content-quality checks and review tooling for larger knowledge pools.
+2. Build accepted knowledge into dataset generation with provenance.
