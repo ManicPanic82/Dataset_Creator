@@ -93,6 +93,16 @@ def test_generation_persists_valid_qa_with_source_provenance(generation_setup):
     assert provenance[0]["knowledge_id"] == knowledge_id
     assert provenance[0]["sources"][0]["source_id"] == source_id
     assert provenance[0]["sources"][0]["evidence"] == "reusable block of code"
+    with records.database.connect() as connection:
+        connection.execute(
+            "UPDATE source_candidates SET url = ?, title = ? WHERE id = ?",
+            ("https://changed.example.org/", "Changed title", source_id),
+        )
+    saved_again = records.get(generated[0]["id"])
+    assert saved_again["provenance"][0]["sources"][0]["url"] == (
+        "https://example.org/python"
+    )
+    assert saved_again["provenance"][0]["sources"][0]["title"] == "Python guide"
     assert provider.calls[0]["model"] == "test-model"
 
 
