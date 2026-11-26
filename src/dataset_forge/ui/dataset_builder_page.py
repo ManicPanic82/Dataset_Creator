@@ -105,11 +105,14 @@ class DatasetBuilderPage(QWidget):
         self.record_list = QListWidget()
         self.record_list.currentItemChanged.connect(self._show_record)
         records_layout.addWidget(self.record_list, 1)
-        self.quality_summary = QLabel(
+        self.quality_summary = QTextEdit()
+        self.quality_summary.setReadOnly(True)
+        self.quality_summary.setAcceptRichText(False)
+        self.quality_summary.setMaximumHeight(190)
+        self.quality_summary.setPlaceholderText(
             "Quality screening appears when you select a record."
         )
-        self.quality_summary.setWordWrap(True)
-        self.quality_summary.setObjectName("muted")
+        self.quality_summary.setObjectName("qualitySummary")
         records_layout.addWidget(self.quality_summary)
         self.record_details = QTextEdit()
         self.record_details.setReadOnly(True)
@@ -233,7 +236,7 @@ class DatasetBuilderPage(QWidget):
     def _refresh_records(self) -> None:
         self.record_list.clear()
         self.record_details.clear()
-        self.quality_summary.setText("Quality screening appears when you select a record.")
+        self.quality_summary.clear()
         self.active_record_id = None
         if self.project_id is None:
             return
@@ -261,13 +264,13 @@ class DatasetBuilderPage(QWidget):
         if current is None:
             self.active_record_id = None
             self.record_details.clear()
-            self.quality_summary.setText("Select a record to run quality screening.")
+            self.quality_summary.setPlainText("Select a record to run quality screening.")
             return
         record_id = current.data(Qt.ItemDataRole.UserRole)
         record = self.record_repository.get(record_id)
         if record is None:
             self.record_details.clear()
-            self.quality_summary.setText("Record unavailable.")
+            self.quality_summary.setPlainText("Record unavailable.")
             return
         self.active_record_id = record_id
         quality = DatasetQualityService.assess(
@@ -284,7 +287,7 @@ class DatasetBuilderPage(QWidget):
         verification = self.verification_reports.get(record_id)
         if verification:
             quality_lines.extend(self._verification_lines(verification))
-        self.quality_summary.setText("\n".join(quality_lines))
+        self.quality_summary.setPlainText("\n".join(quality_lines))
         lines = [
             f"Format: {record['dataset_type']}",
             f"Review: {record['review_status']}",
