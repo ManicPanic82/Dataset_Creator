@@ -132,3 +132,21 @@ def test_research_plan_rejects_unsafe_domain_filters() -> None:
                 "preferred_domains": ["localhost"],
             }
         )
+
+def test_research_plan_recovers_root_metadata_nested_under_subtopics() -> None:
+    plan = ResearchPlan.from_dict(
+        {
+            "objective": "Research Python debugging",
+            "scope": "Official documentation",
+            "topics": ["debugging"],
+            "subtopics": {
+                "debugging": ["breakpoints", "tracebacks"],
+                "target_record_count": 250,
+                "dataset_type": "question_answer",
+            },
+        }
+    )
+
+    assert plan.subtopics == {"debugging": ("breakpoints", "tracebacks")}
+    assert plan.target_record_count == 250
+    assert plan.dataset_type == "question_answer"
