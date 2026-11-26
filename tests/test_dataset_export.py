@@ -155,3 +155,57 @@ def test_export_skips_invalid_accepted_payload_and_reports_count(export_setup, t
     assert result["exported"] == 0
     assert result["skipped"] == 1
     assert destination.read_text(encoding="utf-8") == ""
+
+
+def test_export_splits_are_reproducible_and_keep_provenance(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    for index in range(10):
+        _add_record(
+            records,
+            project["id"],
+            knowledge_id,
+            {"question": f"Question {index}", "answer": f"Answer {index}"},
+            "accepted",
+        )
+
+    service = DatasetExportService(records)
+    first = service.export_splits(project["id"], "question_answer", tmp_path / "one")
+    second = service.export_splits(project["id"], "question_answer", tmp_path / "two")
+
+    assert {name: result["count"] for name, result in first.items() if name in
+            {"train", "validation", "test"}} == {"train": 8, "validation": 1, "test": 1}
+    for name in ("train", "validation", "test"):
+        rows = [json.loads(line) for line in (tmp_path / "one" / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+        rows2 = [json.loads(line) for line in (tmp_path / "two" / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert rows == rows2
+        sidecar = (tmp_path / "one" / f"{name}.provenance.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(sidecar) == first[name]["count"]
+        assert all(json.loads(row)["provenance"] for row in sidecar)
+
+
+def test_export_splits_reject_invalid_ratios(export_setup, tmp_path):
+    project, _, records = export_setup
+    with pytest.raises(ValueError, match="sum"):
+        DatasetExportService(records).export_splits(
+            project["id"], "question_answer", tmp_path, train_ratio=0.8,
+            validation_ratio=0.15, test_ratio=0.1
+        )
+    with pytest.raises(ValueError, match="positive"):
+        DatasetExportService(records).export_splits(
+            project["id"], "question_answer", tmp_path, train_ratio=1,
+            validation_ratio=0, test_ratio=0
+        )
+
+
+def test_export_splits_can_disable_provenance(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    _add_record(
+        records, project["id"], knowledge_id,
+        {"question": "Question", "answer": "Answer"}, "accepted"
+    )
+    result = DatasetExportService(records).export_splits(
+        project["id"], "question_answer", tmp_path, include_provenance=False
+    )
+    assert all(result[name]["provenance_path"] is None for name in
+               ("train", "validation", "test"))
+    assert not list(tmp_path.glob("*.provenance.jsonl"))
