@@ -202,6 +202,11 @@ class MainWindow(QMainWindow):
                 )
                 self.export_provenance_check.setChecked(True)
                 export_form.addRow("Provenance", self.export_provenance_check)
+                self.export_deduplicate_check = QCheckBox(
+                    "Remove exact duplicate records during export"
+                )
+                self.export_deduplicate_check.setChecked(False)
+                export_form.addRow("Duplicate handling", self.export_deduplicate_check)
                 page_layout.addLayout(export_form)
                 split_form = QFormLayout()
                 self.split_profile_combo = QComboBox()
@@ -553,6 +558,7 @@ class MainWindow(QMainWindow):
                 test_ratio=self.split_test_ratio.value() / 100,
                 seed=self.split_seed.value(),
                 include_provenance=self.export_provenance_check.isChecked(),
+                deduplicate=self.export_deduplicate_check.isChecked(),
             )
         except (OSError, ValueError) as exc:
             self.export_status.setText(f"Split export failed: {exc}")
@@ -567,6 +573,7 @@ class MainWindow(QMainWindow):
             f"Train {result['train']['count']} · "
             f"Validation {result['validation']['count']} · "
             f"Test {result['test']['count']}. "
+            f"Removed {result['duplicates_removed']} exact duplicate(s). "
             f"Skipped {result['skipped']} invalid record(s)."
         )
         self.export_status.setText(message)
@@ -595,6 +602,7 @@ class MainWindow(QMainWindow):
                 dataset_type,
                 filename,
                 include_provenance=self.export_provenance_check.isChecked(),
+                deduplicate=self.export_deduplicate_check.isChecked(),
             )
         except (OSError, ValueError) as exc:
             self.export_status.setText(f"Export failed: {exc}")
