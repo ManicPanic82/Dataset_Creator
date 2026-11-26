@@ -18,8 +18,8 @@ def _find_verbatim_evidence(evidence: str, source_text: str) -> str | None:
     clean = evidence.strip()
     if not clean:
         return None
-    parts = re.split(r"\\s+", clean)
-    pattern = r"\\s+".join(re.escape(part) for part in parts)
+    parts = re.split(r"\s+", clean)
+    pattern = r"\s+".join(re.escape(part) for part in parts)
     match = re.search(pattern, source_text)
     return match.group(0) if match else None
 
