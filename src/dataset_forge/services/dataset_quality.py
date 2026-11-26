@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 _TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9_]{2,}")
+_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\\s+")
 _STOP_WORDS = {
     "about", "after", "again", "also", "among", "an", "and", "are", "as", "at",
     "because", "before", "being", "between", "by", "can", "could", "do", "does",
@@ -32,6 +33,10 @@ def _tokens(value: str) -> set[str]:
         for token in _TOKEN_PATTERN.findall(value)
         if token.casefold() not in _STOP_WORDS
     }
+
+
+def _sentences(value: str) -> list[str]:
+    return [part.strip() for part in _SENTENCE_PATTERN.split(value.strip()) if part.strip()]
 
 
 def _record_text(dataset_type: str, payload: dict[str, Any]) -> tuple[str, str]:
@@ -65,7 +70,8 @@ class DatasetQualityService:
         prompt, answer = _record_text(dataset_type, payload)
         prompt_tokens = _tokens(prompt)
         answer_tokens = _tokens(answer)
-        flags: list[dict[str, str]] = []
+        sentences = _sentences(answer)
+        flags: list[dict[str, Any]] = []
 
         if not prompt_tokens or not answer_tokens:
             flags.append({
@@ -105,13 +111,14 @@ class DatasetQualityService:
             })
         else:
             combined_source_tokens: set[str] = set()
+            relevant_items: list[set[str]] = []
             off_topic_items = []
             for item in knowledge_items:
                 source_tokens = _tokens(item["content"])
                 combined_source_tokens.update(source_tokens)
-                # One shared generic term (for example, "exception") is
-                # insufficient evidence that a knowledge item supports this prompt.
-                if len(prompt_tokens.intersection(source_tokens)) < 2:
+                if len(prompt_tokens.intersection(source_tokens)) >= 2:
+                    relevant_items.append(source_tokens)
+                else:
                     off_topic_items.append(item)
 
             if answer_tokens and not answer_tokens.intersection(combined_source_tokens):
@@ -129,9 +136,32 @@ class DatasetQualityService:
                     "severity": "high",
                     "message": (
                         f"{len(off_topic_items)} of {len(knowledge_items)} linked knowledge "
-                        "items share no key terms with the instruction or question. "
-                        "Check whether the record combines unrelated facts."
+                        "items share fewer than two key terms with the instruction or "
+                        "question. Check whether the record combines unrelated facts."
                     ),
+                })
+
+            flagged_sentences: list[str] = []
+            if relevant_items:
+                for sentence in sentences:
+                    sentence_tokens = _tokens(sentence)
+                    if not any(
+                        len(sentence_tokens.intersection(source_tokens)) >= 2
+                        for source_tokens in relevant_items
+                    ):
+                        flagged_sentences.append(sentence)
+            elif sentences:
+                flagged_sentences = sentences
+
+            if flagged_sentences:
+                flags.append({
+                    "code": "off_topic_answer_sentence",
+                    "severity": "high",
+                    "message": (
+                        f"{len(flagged_sentences)} answer sentence(s) do not appear "
+                        "to be supported by knowledge relevant to the question."
+                    ),
+                    "sentences": flagged_sentences,
                 })
 
         deductions = sum(
@@ -149,7 +179,8 @@ class DatasetQualityService:
             "flags": flags,
             "method": "heuristic",
             "disclaimer": (
-                "Heuristic screening only. Word overlap cannot prove semantic relevance "
-                "or factual correctness. Review the answer and source evidence yourself."
+                "Heuristic screening only. Sentence and word overlap cannot prove "
+                "semantic relevance or factual correctness. Review the answer and "
+                "source evidence yourself."
             ),
         }
