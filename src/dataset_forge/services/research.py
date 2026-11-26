@@ -48,6 +48,13 @@ class ResearchPlan:
         raw_subtopics = data.get("subtopics", {})
         if not isinstance(raw_subtopics, dict):
             raise ValueError("subtopics must be an object.")
+        raw_subtopics = dict(raw_subtopics)
+        # Some local models occasionally nest a root-level scalar inside subtopics.
+        # Recover only recognized plan metadata; do not coerce arbitrary malformed values.
+        normalized_data = dict(data)
+        for metadata_key in ("target_record_count", "dataset_type"):
+            if metadata_key not in normalized_data and metadata_key in raw_subtopics:
+                normalized_data[metadata_key] = raw_subtopics.pop(metadata_key)
         subtopics: dict[str, tuple[str, ...]] = {}
         for topic, values in raw_subtopics.items():
             if not isinstance(topic, str) or not topic.strip():
@@ -56,13 +63,13 @@ class ResearchPlan:
                 values, f"subtopics.{topic}", limit=20
             )
 
-        target_count = data.get("target_record_count", 100)
+        target_count = normalized_data.get("target_record_count", 100)
         if isinstance(target_count, bool) or not isinstance(target_count, int):
             raise ValueError("target_record_count must be an integer.")
         if not 1 <= target_count <= 1_000_000:
             raise ValueError("target_record_count must be between 1 and 1,000,000.")
 
-        dataset_type = data.get("dataset_type", "instruction")
+        dataset_type = normalized_data.get("dataset_type", "instruction")
         if not isinstance(dataset_type, str) or not dataset_type.strip():
             raise ValueError("dataset_type must be a non-empty string.")
 
