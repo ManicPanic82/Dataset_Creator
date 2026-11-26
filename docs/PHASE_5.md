@@ -59,7 +59,20 @@ Each item contains its text, optional confidence score, review status, timestamp
 
 The initial extraction limit means content beyond the first 48,000 characters of a source is not processed in this checkpoint.
 
+## Downstream dataset-generation context
+
+The `KnowledgeContextService` provides the Phase 6 generation boundary:
+
+- By default, it selects accepted items from the requested project only.
+- Callers may pass an explicit list of knowledge IDs to limit generation scope.
+- Explicit selections fail closed if an item is pending, rejected, missing, or belongs to another project.
+- Duplicate IDs in a selection are rejected.
+- Each prepared item includes its knowledge ID, type, content, confidence, and every linked source URL/title/domain plus its evidence snippet.
+- Pending and rejected items are never silently included.
+- The service prepares structured context only. Dataset schemas, AI prompting, record generation, and UI controls remain Phase 6 work.
+
+This keeps generation grounded in reviewed knowledge while preserving enough provenance for generated records to be traced back to the original sources.
+
 ## Remaining Phase 5 work
 
 1. Add deeper content-quality checks and review tooling for larger knowledge pools.
-2. Build accepted knowledge into dataset generation with provenance.
