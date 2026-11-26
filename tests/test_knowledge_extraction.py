@@ -152,7 +152,7 @@ def test_extraction_ignores_malformed_and_duplicate_candidates():
 
 
 def test_extraction_accepts_whitespace_normalized_evidence_and_stores_source_text():
-    source_text = "The first step is to determine whether\\nthe problem has already been reported."
+    source_text = "The first step is to determine whether\nthe problem has already been reported."
     provider = FakeProvider({
         "items": [
             {
@@ -170,7 +170,7 @@ def test_extraction_accepts_whitespace_normalized_evidence_and_stores_source_tex
 
     assert service.extract_source("project-1", "source-1") == 1
     assert repository.items[0][4]["evidence"]["source-1"] == (
-        "determine whether\\nthe problem has already been reported."
+        "determine whether\nthe problem has already been reported."
     )
 
 
