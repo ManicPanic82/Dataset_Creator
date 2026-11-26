@@ -120,8 +120,6 @@ class DatasetExportService:
             name = max(partitions, key=lambda key:
                        (targets[key] - len(partitions[key])) / targets[key])
             partitions[name].extend(group)
-        total = len(matching)
-
         directory = Path(output_directory).expanduser()
         directory.mkdir(parents=True, exist_ok=True)
         results: dict[str, Any] = {}
@@ -156,6 +154,7 @@ class DatasetExportService:
             "seed": seed,
             "skipped": skipped,
             "available": len(matching),
+            "groups": len(group_list),
             "ratios": {"train": train_ratio, "validation": validation_ratio, "test": test_ratio},
         })
         return results
