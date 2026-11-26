@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dataset_forge.services.dataset_export import DatasetExportService
 from dataset_forge.services.ai_providers import (
     RESEARCH_GENERATION_TIMEOUT_SECONDS,
     ProviderConfig,
@@ -31,6 +30,7 @@ from dataset_forge.services.ai_providers import (
     ProviderKind,
     create_provider,
 )
+from dataset_forge.services.dataset_export import DatasetExportService
 from dataset_forge.services.task_manager import TaskManager
 from dataset_forge.storage.dataset_record_repository import DatasetRecordRepository
 from dataset_forge.storage.knowledge_repository import KnowledgeRepository
