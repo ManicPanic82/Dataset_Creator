@@ -242,3 +242,67 @@ def test_export_profiles_define_valid_split_targets():
         and all(value > 0 for value in profile.values())
         for profile in SPLIT_PROFILES.values()
     )
+
+def test_export_can_remove_exact_duplicate_records_and_keep_first_provenance(
+    export_setup, tmp_path
+):
+    project, knowledge_id, records = export_setup
+    first_id = _add_record(
+        records, project["id"], knowledge_id,
+        {"question": "Same question?", "answer": "Same answer."}, "accepted"
+    )
+    _add_record(
+        records, project["id"], knowledge_id,
+        {"answer": "Same answer.", "question": "Same question?"}, "accepted"
+    )
+    destination = tmp_path / "deduplicated.jsonl"
+
+    result = DatasetExportService(records).export_project(
+        project["id"], "question_answer", destination, deduplicate=True
+    )
+
+    rows = [json.loads(line) for line in destination.read_text(encoding="utf-8").splitlines()]
+    sidecar = [
+        json.loads(line)
+        for line in destination.with_name("deduplicated.provenance.jsonl")
+        .read_text(encoding="utf-8").splitlines()
+    ]
+    assert rows == [{"question": "Same question?", "answer": "Same answer."}]
+    assert result["available"] == 2
+    assert result["exported"] == 1
+    assert result["duplicates_removed"] == 1
+    assert sidecar[0]["record_id"] == first_id
+
+
+def test_export_duplicate_filter_is_opt_in(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    payload = {"question": "Repeated?", "answer": "Repeated answer."}
+    _add_record(records, project["id"], knowledge_id, payload, "accepted")
+    _add_record(records, project["id"], knowledge_id, payload, "accepted")
+
+    result = DatasetExportService(records).export_project(
+        project["id"], "question_answer", tmp_path / "duplicates.jsonl"
+    )
+
+    assert result["exported"] == 2
+    assert result["duplicates_removed"] == 0
+
+
+def test_split_export_deduplicates_before_leakage_grouping(export_setup, tmp_path):
+    project, knowledge_id, records = export_setup
+    payload = {"question": "Same?", "answer": "Same answer."}
+    _add_record(records, project["id"], knowledge_id, payload, "accepted")
+    _add_record(records, project["id"], knowledge_id, payload, "accepted")
+    _add_record(
+        records, project["id"], knowledge_id,
+        {"question": "Different?", "answer": "Different answer."}, "accepted"
+    )
+
+    result = DatasetExportService(records).export_splits(
+        project["id"], "question_answer", tmp_path, deduplicate=True
+    )
+    exported_count = sum(result[name]["count"] for name in ("train", "validation", "test"))
+    assert result["available"] == 3
+    assert result["duplicates_removed"] == 1
+    assert exported_count == 2
+    assert result["groups"] == 1
