@@ -148,3 +148,47 @@ def test_extraction_ignores_malformed_and_duplicate_candidates():
 
     assert service.extract_source("project-1", "source-1") == 1
     assert len(repository.items) == 1
+
+
+
+def test_extraction_accepts_whitespace_normalized_evidence_and_stores_source_text():
+    source_text = "The first step is to determine whether\\nthe problem has already been reported."
+    provider = FakeProvider({
+        "items": [
+            {
+                "kind": "procedure",
+                "content": "Check whether the problem has already been reported.",
+                "evidence": "determine whether the problem has already been reported.",
+                "confidence": 0.9,
+            }
+        ]
+    })
+    repository = FakeKnowledgeRepository()
+    service = KnowledgeExtractionService(
+        provider, "test-model", repository, FakeSourceContentRepository(source_text)
+    )
+
+    assert service.extract_source("project-1", "source-1") == 1
+    assert repository.items[0][4]["evidence"]["source-1"] == (
+        "determine whether\\nthe problem has already been reported."
+    )
+
+
+def test_extraction_still_rejects_changed_evidence_wording():
+    provider = FakeProvider({
+        "items": [
+            {
+                "kind": "fact",
+                "content": "The tracker should be checked first.",
+                "evidence": "Check the issue tracker before filing a report.",
+                "confidence": 0.9,
+            }
+        ]
+    })
+    repository = FakeKnowledgeRepository()
+    service = KnowledgeExtractionService(
+        provider, "test-model", repository, FakeSourceContentRepository()
+    )
+
+    assert service.extract_source("project-1", "source-1") == 0
+    assert repository.items == []
