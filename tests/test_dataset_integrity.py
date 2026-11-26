@@ -111,3 +111,25 @@ def test_verify_manifest_rejects_unknown_manifest_version(tmp_path):
 
     assert result["success"] is False
     assert "Unsupported or malformed manifest version." in result["errors"]
+
+
+def test_verify_manifest_rejects_malformed_integrity_metadata(tmp_path):
+    manifest = tmp_path / "dataset.manifest.json"
+    manifest.write_text(
+        json.dumps({
+            "manifest_version": 1,
+            "exported_records": 1,
+            "files": {
+                "dataset.jsonl": {
+                    "sha256": "not-a-hash",
+                    "records": "one",
+                }
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    result = DatasetIntegrityService.verify_manifest(manifest)
+
+    assert result["success"] is False
+    assert any("invalid integrity metadata" in error for error in result["errors"])
