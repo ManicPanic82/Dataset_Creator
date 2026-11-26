@@ -9,6 +9,7 @@ from typing import Any
 from dataset_forge.storage.dataset_record_repository import (
     DATASET_TYPES,
     DatasetRecordRepository,
+    is_valid_dataset_payload,
 )
 
 
@@ -20,44 +21,7 @@ class DatasetExportService:
 
     @staticmethod
     def _valid_payload(dataset_type: str, payload: Any) -> bool:
-        if not isinstance(payload, dict):
-            return False
-        if dataset_type == "instruction":
-            return (
-                set(payload) == {"instruction", "input", "output"}
-                and isinstance(payload["instruction"], str)
-                and bool(payload["instruction"].strip())
-                and isinstance(payload["input"], str)
-                and isinstance(payload["output"], str)
-                and bool(payload["output"].strip())
-            )
-        if dataset_type == "question_answer":
-            return (
-                set(payload) == {"question", "answer"}
-                and all(
-                    isinstance(payload[key], str) and bool(payload[key].strip())
-                    for key in ("question", "answer")
-                )
-            )
-        if dataset_type == "conversational":
-            messages = payload.get("messages")
-            if set(payload) != {"messages"} or not isinstance(messages, list):
-                return False
-            if not 2 <= len(messages) <= 6:
-                return False
-            expected_roles = ["user", "assistant"] * 3
-            return (
-                all(
-                    isinstance(message, dict)
-                    and set(message) == {"role", "content"}
-                    and message["role"] == expected_roles[index]
-                    and isinstance(message["content"], str)
-                    and bool(message["content"].strip())
-                    for index, message in enumerate(messages)
-                )
-                and messages[-1]["role"] == "assistant"
-            )
-        return False
+        return is_valid_dataset_payload(dataset_type, payload)
 
     @staticmethod
     def _write_atomic(path: Path, lines: list[str]) -> None:
