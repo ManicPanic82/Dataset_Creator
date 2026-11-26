@@ -96,12 +96,28 @@ The generator treats all source-derived knowledge as untrusted reference data. I
 
 The Dataset Builder UI is now wired into the main workspace. It lets users choose a dataset format, difficulty, batch size, and up to 20 accepted knowledge items; generation runs in the background. Generated drafts can be inspected with their snapshotted source provenance and marked accepted, rejected, or returned to pending review. The UI defaults to selecting at most 20 knowledge items. The generation prompt explicitly requests one narrowly scoped concept per record and tells the model not to combine independent facts.
 
-The quality-screening panel checks prompt/answer keyword overlap, answer length, supporting knowledge availability, and whether multiple linked knowledge items appear unrelated to the prompt. Sentence-level screening now splits answers into sentences and compares each sentence with knowledge items that independently match the prompt. Sentences that do not overlap sufficiently with question-relevant knowledge are flagged and displayed verbatim in the review panel. This helps identify mixed-topic answers and claims that may lack relevant support. It remains a lightweight heuristic: it cannot establish semantic relevance or factual correctness, and it never changes review status or automatically accepts/rejects records. Human review against the displayed source evidence remains required. Only the three listed dataset types are currently supported. Schema editing, target distributions, resumable generation, record editing, bulk review, and model-assisted semantic verification remain subsequent work.
+The quality-screening panel checks prompt/answer keyword overlap, answer length, supporting knowledge availability, and whether multiple linked knowledge items appear unrelated to the prompt. Sentence-level screening now splits answers into sentences and compares each sentence with knowledge items that independently match the prompt. Sentences that do not overlap sufficiently with question-relevant knowledge are flagged and displayed verbatim in the review panel. This helps identify mixed-topic answers and claims that may lack relevant support. It remains a lightweight heuristic: it cannot establish semantic relevance or factual correctness, and it never changes review status or automatically accepts/rejects records. Human review against the displayed source evidence remains required. Only the three listed dataset types are currently supported. Schema editing, target distributions, resumable generation, record editing, bulk review, and bulk review and durable verification-report storage remain subsequent work.
 
 
 ### Model-assisted semantic verification
 
 Dataset Builder now offers an explicit **Run AI verification** action for the selected record. It uses the configured provider and model in a background task and evaluates relevance, factual support, unsupported additions, mixed topics, clarity, and completeness against the record's snapshotted accepted knowledge. The model returns a bounded structured report with a verdict, score, explanation, and findings tied to supplied knowledge IDs. Any quoted evidence must be an exact substring of the referenced knowledge content; unknown IDs and fabricated/non-verbatim quotes are rejected. Source text and record fields are treated as untrusted data, and the verifier is instructed not to browse, fetch URLs, execute code, or use outside facts. Reports are held in the current application session and are not written into records. Verification never edits dataset content, changes review status, or bypasses human approval. It is advisory only: model assessments can be wrong, and users must inspect findings against the displayed source evidence.
+
+### Batch dataset review
+
+Dataset Builder now includes **Verify all records** for the current project. The batch workflow:
+
+- Runs the heuristic quality assessment against every generated record.
+- Runs AI semantic verification sequentially for every record that does not already have a successful report in the current application session.
+- Reports progress across the heuristic and AI stages.
+- Keeps processing when an individual record fails verification, recording that error against the affected record rather than aborting the batch.
+- Summarises AI pass, review, fail, and error counts when complete.
+- Displays each record's own heuristic assessment and AI report/findings when selected.
+- Allows a later batch run to retry records that previously errored, without repeating successful verifications in the same session.
+- Does not alter dataset content or review status. All outcomes remain advisory and human review is required.
+
+Verification reports and per-record errors are currently held in application memory, matching the existing single-record verification behaviour. They are not persisted across application restarts in this checkpoint.
+
 ## Accepted dataset export checkpoint
 
 The Projects & Export workspace now exports reviewed training records as JSON Lines.
