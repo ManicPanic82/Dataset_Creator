@@ -90,9 +90,12 @@ class DatasetRecordRepository:
                 if row["review_status"] != "accepted":
                     raise ValueError("Record provenance must reference accepted knowledge.")
                 source_rows = connection.execute(
-                    """SELECT s.id, s.url, s.title, s.domain, kis.evidence
+                    """SELECT s.id, s.url,
+                              COALESCE(NULLIF(s.title, ''), se.title, '') AS title,
+                              s.domain, kis.evidence
                        FROM knowledge_item_sources kis
                        JOIN source_candidates s ON s.id = kis.source_id
+                       LEFT JOIN source_extractions se ON se.source_id = s.id
                        WHERE kis.knowledge_id = ?""",
                     (knowledge_id,),
                 ).fetchall()
