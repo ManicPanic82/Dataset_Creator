@@ -195,7 +195,12 @@ class MainWindow(QMainWindow):
                 )
                 page_layout.addWidget(self.sources_page)
             elif title == "Knowledge Pool":
-                self.knowledge_page = KnowledgePoolPage(self.knowledge_repository)
+                self.knowledge_page = KnowledgePoolPage(
+                    self.knowledge_repository,
+                    self.source_content_repository,
+                    self.task_manager,
+                    self._research_provider_config,
+                )
                 page_layout.addWidget(self.knowledge_page)
             elif title == "Settings":
                 self._build_settings_page(page_layout)
