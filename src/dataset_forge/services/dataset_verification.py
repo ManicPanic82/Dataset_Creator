@@ -28,7 +28,7 @@ Return exactly one JSON object with:
 - findings: array of at most 12 objects. Each has:
   - severity: "low", "medium", or "high"
   - category: "relevance", "unsupported_claim", "mixed_topics", "clarity", or "completeness"
-  - claim: exact short claim or sentence from the answer when applicable
+  - claim: exact short claim or sentence copied from the answer, preserving wording and punctuation; use an empty string if an exact excerpt cannot be copied
   - explanation: concise reason
   - knowledge_id: one supplied knowledge ID that supports or was expected to support the claim
   - evidence: exact verbatim quote from that knowledge item's content
@@ -102,11 +102,19 @@ class DatasetVerificationService:
             evidence = finding["evidence"]
             if evidence and evidence not in knowledge[knowledge_id]:
                 raise ValueError("Verifier evidence is not an exact quote from its knowledge item.")
-            if finding["claim"] and finding["claim"] not in answer_text:
-                raise ValueError("Verifier finding claim is not an exact excerpt from the answer.")
-            if not finding["explanation"].strip():
+            clean_finding = dict(finding)
+            if clean_finding["claim"] and clean_finding["claim"] not in answer_text:
+                clean_finding["claim"] = ""
+                note = (
+                    "The model did not provide an exact excerpt from the answer; "
+                    "the claim quote was omitted. Check the answer manually."
+                )
+                clean_finding["explanation"] = (
+                    f"{clean_finding['explanation'].strip()} {note}"
+                )[:800]
+            if not clean_finding["explanation"].strip():
                 raise ValueError("Verifier finding explanations cannot be empty.")
-            clean_findings.append(dict(finding))
+            clean_findings.append(clean_finding)
 
         return {
             "verdict": verdict,
