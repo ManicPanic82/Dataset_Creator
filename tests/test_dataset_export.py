@@ -355,7 +355,7 @@ def test_split_export_writes_manifest_with_ratios_seed_and_counts(
 
     result = DatasetExportService(records).export_splits(
         project["id"], "question_answer", tmp_path,
-        train_ratio=0.7, validation_ratio=0.2, test_ratio=0.1,
+        train_ratio=0.7, validation_ratio=0.15, test_ratio=0.15,
         seed=123, split_profile="balanced", include_provenance=True,
         deduplicate=True,
     )
@@ -369,7 +369,7 @@ def test_split_export_writes_manifest_with_ratios_seed_and_counts(
     assert manifest["seed"] == 123
     assert manifest["split_profile"] == "balanced"
     assert manifest["ratios"] == {
-        "train": 0.7, "validation": 0.2, "test": 0.1
+        "train": 0.7, "validation": 0.15, "test": 0.15
     }
     assert manifest["leakage_groups"] == 1
     assert sum(split["count"] for split in manifest["splits"].values()) == 3
