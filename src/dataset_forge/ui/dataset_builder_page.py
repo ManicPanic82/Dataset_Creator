@@ -270,9 +270,10 @@ class DatasetBuilderPage(QWidget):
         quality_lines = [
             f"Quality screening: {quality['score']}/100 · {quality['label']}"
         ]
-        quality_lines.extend(
-            f"- {flag['message']}" for flag in quality["flags"]
-        )
+        for flag in quality["flags"]:
+            quality_lines.append(f"- {flag['message']}")
+            for sentence in flag.get("sentences", []):
+                quality_lines.append(f'  Flagged sentence: "{sentence}"')
         quality_lines.append(quality["disclaimer"])
         self.quality_summary.setText("\n".join(quality_lines))
         lines = [
